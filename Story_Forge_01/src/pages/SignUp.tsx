@@ -35,11 +35,11 @@ const SignUp = () => {
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name">User Name</Label>
                 <Input
                   id="name"
                   type="text"
-                  placeholder="Jane Doe"
+                  placeholder="e.g Chisomo Banda"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -50,7 +50,7 @@ const SignUp = () => {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="you@example.com"
+                  placeholder="Email Address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -61,7 +61,7 @@ const SignUp = () => {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -72,7 +72,7 @@ const SignUp = () => {
                 <Input
                   id="confirm-password"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="Confirm Password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
