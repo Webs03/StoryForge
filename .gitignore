@@ -6,6 +6,11 @@ __pycache__/
 
 # Node modules (if you have any)
 node_modules/
+test/
+scripts/
+
+#Environmental Valuables
+.env.local
 
 # OS files
 .DS_Store
