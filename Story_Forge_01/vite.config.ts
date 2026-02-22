@@ -7,10 +7,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    hmr: {
-      overlay: false,
-    },
-    allowedHosts: ['karleen-unsalty-lina.ngrok-free.dev']
+    allowedHosts: true
   },
   plugins: [react()].filter(Boolean),
   resolve: {
