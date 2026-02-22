@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import StoryCard from "@/components/StoryCard";
 
 type WorkType = "all" | "story" | "playscript";
 type StatusType = "all" | "Draft" | "Editing" | "Final";
@@ -96,108 +97,105 @@ const Dashboard = () => {
       </nav>
 
       <div className="container mx-auto px-6 py-10">
-        {/* Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-10"
-        >
-          <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-2">Your Workshop</h1>
-          <div className="flex flex-wrap gap-6 mt-4 font-body text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5"><FileText className="h-4 w-4" /> {mockWorks.length} works</span>
-            <span className="flex items-center gap-1.5"><Hash className="h-4 w-4" /> {totalWords.toLocaleString()} words</span>
-            <span className="flex items-center gap-1.5"><Clock className="h-4 w-4" /> Last edited 2 hours ago</span>
-          </div>
-        </motion.div>
+        <div className="grid grid-cols-12 gap-6">
+          {/* Left Nav */}
+          <aside className="hidden md:block md:col-span-3">
+            <div className="sticky top-20 space-y-4">
+              <div className="bg-card p-4 rounded-lg border border-border">
+                <h4 className="font-display font-semibold mb-2">Library</h4>
+                <nav className="flex flex-col gap-2 text-sm">
+                  <Link to="/dashboard" className="text-foreground/90 hover:text-primary">My Works</Link>
+                  <Link to="/document/new" className="text-foreground/90 hover:text-primary">New Work</Link>
+                  <Link to="/browse" className="text-foreground/90 hover:text-primary">Browse</Link>
+                </nav>
+              </div>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search your works…"
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <div className="flex gap-2 items-center flex-wrap">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            {(["all", "story", "playscript"] as WorkType[]).map((t) => (
-              <Button
-                key={t}
-                size="sm"
-                variant={typeFilter === t ? "default" : "outline"}
-                onClick={() => setTypeFilter(t)}
-                className="capitalize"
-              >
-                {t === "all" ? "All Types" : t === "story" ? "Stories" : "Playscripts"}
-              </Button>
-            ))}
-            <span className="w-px h-5 bg-border mx-1" />
-            {(["all", "Draft", "Editing", "Final"] as StatusType[]).map((s) => (
-              <Button
-                key={s}
-                size="sm"
-                variant={statusFilter === s ? "default" : "outline"}
-                onClick={() => setStatusFilter(s)}
-              >
-                {s === "all" ? "All Status" : s}
-              </Button>
-            ))}
-          </div>
-        </div>
+              <div className="bg-card p-4 rounded-lg border border-border">
+                <h4 className="font-display font-semibold mb-2">Filters</h4>
+                <div className="flex flex-col gap-2">
+                  {(["all", "story", "playscript"] as WorkType[]).map((t) => (
+                    <Button
+                      key={t}
+                      size="sm"
+                      variant={typeFilter === t ? "default" : "outline"}
+                      onClick={() => setTypeFilter(t)}
+                      className="capitalize w-full"
+                    >
+                      {t === "all" ? "All Types" : t === "story" ? "Stories" : "Playscripts"}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
 
-        {/* Works Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map((work, i) => (
-            <motion.div
-              key={work.id}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: i * 0.05 }}
-            >
-              <Link
-                to={`/document/${work.id}`}
-                className="block bg-card rounded-lg border border-border p-6 hover:border-primary/30 hover:shadow-lg transition-all group"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    {work.type === "story" ? (
-                      <FileText className="h-4 w-4 text-primary" />
-                    ) : (
-                      <Theater className="h-4 w-4 text-primary" />
-                    )}
-                    <span className="font-body text-xs text-muted-foreground uppercase tracking-wide">
-                      {work.type === "story" ? "Short Story" : "Playscript"}
-                    </span>
-                  </div>
-                  <Badge className={statusColors[work.status]} variant="secondary">
-                    {work.status}
-                  </Badge>
+          {/* Main Feed */}
+          <main className="col-span-12 md:col-span-6">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+              <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-2">Your Workshop</h1>
+              <div className="flex items-center gap-4 mt-2">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search your works…"
+                    className="pl-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
                 </div>
-                <h3 className="font-display text-lg font-semibold text-foreground mb-2 group-hover:text-primary transition-colors">
-                  {work.title}
-                </h3>
-                <p className="font-body text-sm text-muted-foreground line-clamp-2 mb-4 leading-relaxed italic">
-                  "{work.excerpt}"
-                </p>
-                <div className="flex items-center justify-between font-body text-xs text-muted-foreground">
-                  <span>{work.genre}</span>
-                  <span>{work.wordCount.toLocaleString()} words · {work.updatedAt}</span>
+                <div className="ml-auto flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{mockWorks.length} works · {totalWords.toLocaleString()} words</span>
                 </div>
-              </Link>
+              </div>
             </motion.div>
-          ))}
-        </div>
 
-        {filtered.length === 0 && (
-          <div className="text-center py-20">
-            <BookOpen className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-            <p className="font-display text-xl text-muted-foreground">No works found</p>
-            <p className="font-body text-sm text-muted-foreground mt-1">Try adjusting your filters.</p>
-          </div>
-        )}
+            <div className="space-y-4">
+              {filtered.map((work, i) => (
+                <motion.div
+                  key={work.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: i * 0.03 }}
+                >
+                  <StoryCard work={work} />
+                </motion.div>
+              ))}
+
+              {filtered.length === 0 && (
+                <div className="text-center py-20">
+                  <BookOpen className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <p className="font-display text-xl text-muted-foreground">No works found</p>
+                  <p className="font-body text-sm text-muted-foreground mt-1">Try adjusting your filters.</p>
+                </div>
+              )}
+            </div>
+          </main>
+
+          {/* Right Sidebar */}
+          <aside className="hidden md:block md:col-span-3">
+            <div className="sticky top-20 space-y-4">
+              <div className="bg-card p-4 rounded-lg border border-border">
+                <h4 className="font-display font-semibold mb-3">Recommended</h4>
+                <ul className="flex flex-col gap-3">
+                  {mockWorks.slice(0, 3).map((w) => (
+                    <li key={w.id} className="flex items-start gap-3">
+                      <div className="w-12 h-16 rounded-sm bg-muted/10 flex-shrink-0" />
+                      <div>
+                        <Link to={`/document/${w.id}`} className="font-body text-sm font-semibold text-foreground hover:text-primary">{w.title}</Link>
+                        <div className="text-xs text-muted-foreground">{w.genre} · {w.wordCount.toLocaleString()} words</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="bg-card p-4 rounded-lg border border-border">
+                <h4 className="font-display font-semibold mb-3">Activity</h4>
+                <div className="text-xs text-muted-foreground">Last edited: {mockWorks[0].updatedAt}</div>
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
   );
