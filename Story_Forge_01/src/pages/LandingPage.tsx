@@ -1,208 +1,322 @@
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { BookOpen, Pen, FolderOpen, History, Share2, Shield } from "lucide-react";
+import { BookOpen, Compass, Flame, PenLine, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import heroImage from "@/assets/hero-image.jpg";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
+import StoryCard from "@/components/StoryCard";
+import { useDocuments } from "@/hooks/use-documents";
+import { useAuth } from "@/hooks/use-auth";
 
-const features = [
-  {
-    icon: Pen,
-    title: "Specialized Editors",
-    description: "Dedicated editors for short stories and playscripts with professional formatting tools.",
-  },
-  {
-    icon: FolderOpen,
-    title: "Smart Organization",
-    description: "Tags, collections, status labels, and powerful search across all your works.",
-  },
-  {
-    icon: History,
-    title: "Version Control",
-    description: "Auto-save, manual checkpoints, side-by-side comparison, and instant rollback.",
-  },
-  {
-    icon: Share2,
-    title: "Export & Share",
-    description: "Export to PDF, DOCX, EPUB. Share with password protection and expiration dates.",
-  },
-  {
-    icon: BookOpen,
-    title: "Writing Analytics",
-    description: "Track your productivity, writing streaks, and most productive times.",
-  },
-  {
-    icon: Shield,
-    title: "Secure & Private",
-    description: "Your stories are encrypted and backed up. You own your data, always.",
-  },
-];
+const scoreStory = (reads: number, votes: number, comments: number) =>
+  reads + votes * 3 + comments * 2;
 
 const LandingPage = () => {
+  const { user, userProfile } = useAuth();
+  const { documents, publicStories, publicLoading } = useDocuments();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState("all");
+  const [selectedGenre, setSelectedGenre] = useState("all");
+
+  const availableLanguages = useMemo(() => {
+    const values = Array.from(new Set(publicStories.map((story) => story.language))).filter(Boolean);
+    return ["all", ...values.sort((a, b) => a.localeCompare(b))];
+  }, [publicStories]);
+
+  const availableGenres = useMemo(() => {
+    const values = Array.from(new Set(publicStories.map((story) => story.genre))).filter(Boolean);
+    return ["all", ...values.sort((a, b) => a.localeCompare(b))];
+  }, [publicStories]);
+
+  const filteredStories = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+
+    return publicStories.filter((story) => {
+      if (selectedLanguage !== "all" && story.language !== selectedLanguage) return false;
+      if (selectedGenre !== "all" && story.genre !== selectedGenre) return false;
+
+      if (!normalizedSearch) return true;
+
+      const searchableText = [
+        story.title,
+        story.description,
+        story.genre,
+        story.language,
+        story.ownerName,
+        story.tags.join(" "),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearch);
+    });
+  }, [publicStories, searchQuery, selectedGenre, selectedLanguage]);
+
+  const trendingStories = useMemo(
+    () =>
+      [...filteredStories]
+        .sort(
+          (a, b) =>
+            scoreStory(b.reads, b.votes, b.comments) -
+            scoreStory(a.reads, a.votes, a.comments),
+        )
+        .slice(0, 6),
+    [filteredStories],
+  );
+
+  const recommendedStories = useMemo(() => {
+    if (!user || documents.length === 0) {
+      return trendingStories.slice(0, 6);
+    }
+
+    const favoriteGenres = new Set(
+      documents.map((doc) => doc.genre.toLowerCase()).filter(Boolean),
+    );
+    const favoriteTags = new Set(
+      documents.flatMap((doc) => doc.tags.map((tag) => tag.toLowerCase())),
+    );
+
+    const personalized = filteredStories
+      .filter((story) => story.owner !== user.uid)
+      .map((story) => {
+        let score = scoreStory(story.reads, story.votes, story.comments);
+        if (favoriteGenres.has(story.genre.toLowerCase())) score += 50;
+        const matchingTags = story.tags.filter((tag) =>
+          favoriteTags.has(tag.toLowerCase()),
+        ).length;
+        score += matchingTags * 25;
+        return { story, score };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map((entry) => entry.story);
+
+    return personalized.length > 0 ? personalized : trendingStories.slice(0, 6);
+  }, [documents, filteredStories, trendingStories, user]);
+
+  const continueReading = useMemo(() => documents.slice(0, 3), [documents]);
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
-        <div className="container mx-auto flex items-center justify-between h-16 px-6">
-          <Link to="/" className="flex items-center gap-2">
+    <div className="min-h-screen bg-gradient-to-b from-background via-background to-card">
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
+        <div className="container mx-auto h-16 px-6 flex items-center justify-between gap-3">
+          <Link to="/" className="flex items-center gap-2 shrink-0">
             <BookOpen className="h-6 w-6 text-primary" />
             <span className="font-display text-xl font-bold text-foreground">StoryForge</span>
           </Link>
-          <div className="hidden md:flex items-center gap-8 font-body text-sm">
-            <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Features</a>
-            <a href="#workflow" className="text-muted-foreground hover:text-foreground transition-colors">How It Works</a>
+
+          <div className="hidden md:flex flex-1 max-w-xl relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search stories, tags, or writers..."
+              className="pl-10"
+            />
           </div>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" asChild>
-              <Link to="/signin">Sign In</Link>
-            </Button>
-            <Button asChild>
-              <Link to="/signup">Get Started</Link>
-            </Button>
+
+          <div className="flex items-center gap-2">
+            {user ? (
+              <Button asChild size="sm">
+                <Link to="/dashboard">{userProfile?.name ? `${userProfile.name}'s Desk` : "Dashboard"}</Link>
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/signin">Sign In</Link>
+                </Button>
+                <Button size="sm" asChild>
+                  <Link to="/signup">Sign Up</Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="relative pt-32 pb-20 md:pt-44 md:pb-32 overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <img src={heroImage} alt="Writing desk" className="w-full h-full object-cover opacity-20" />
-          <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
-        </div>
-        <div className="container mx-auto px-6 relative z-10">
+      <section className="pt-28 pb-12 md:pt-36 md:pb-16">
+        <div className="container mx-auto px-6">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className="max-w-3xl mx-auto text-center"
+            transition={{ duration: 0.6 }}
+            className="max-w-3xl"
           >
-            <p className="text-primary font-body font-semibold tracking-widest uppercase text-sm mb-4">
-              For Writers, By Design
+            <p className="text-sm tracking-widest uppercase text-primary font-semibold mb-3">
+              Discovery and Writing Hub
             </p>
-            <h1 className="font-display text-5xl md:text-7xl font-bold text-foreground leading-tight mb-6 text-balance">
-              Where Stories Find Their Shape
+            <h1 className="font-display text-4xl md:text-6xl leading-tight">
+              Discover stories, keep your reading flow, and publish your own chapters.
             </h1>
-            <p className="font-body text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-              A secure, intuitive platform for writers to craft, organize, and manage short stories and playscripts — with professional formatting and version control.
+            <p className="mt-5 text-muted-foreground text-lg">
+              StoryForge now works as a reading-and-writing home: personalized recommendations,
+              language-first browsing, and one-click access to your writing workspace.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" className="text-base px-8 py-6" asChild>
-                <Link to="/dashboard">Start Writing Free</Link>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Button size="lg" asChild>
+                <Link to={user ? "/dashboard" : "/signup"}>
+                  <PenLine className="h-4 w-4 mr-1" />
+                  Start Writing
+                </Link>
               </Button>
-              <Button size="lg" variant="outline" className="text-base px-8 py-6" asChild>
-                <a href="#features">Explore Features</a>
+              <Button size="lg" variant="outline" asChild>
+                <a href="#discover">
+                  <Compass className="h-4 w-4 mr-1" />
+                  Start Reading
+                </a>
               </Button>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-20 md:py-32 bg-card">
+      <section id="discover" className="pb-8">
         <div className="container mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-16"
-          >
-            <p className="text-primary font-body font-semibold tracking-widest uppercase text-sm mb-3">Crafted for Writers</p>
-            <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
-              Everything You Need to Write
-            </h2>
-          </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {features.map((feature, i) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="bg-background rounded-lg p-8 border border-border hover:border-primary/30 transition-colors group"
+          <div className="rounded-lg border border-border bg-card p-4 md:p-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <div className="relative md:flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search stories, tags, or writers..."
+                  className="pl-10"
+                />
+              </div>
+
+              <select
+                value={selectedLanguage}
+                onChange={(event) => setSelectedLanguage(event.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
-                <div className="h-12 w-12 rounded-lg bg-warm-light flex items-center justify-center mb-5 group-hover:bg-primary/20 transition-colors">
-                  <feature.icon className="h-6 w-6 text-primary" />
-                </div>
-                <h3 className="font-display text-xl font-semibold text-foreground mb-2">{feature.title}</h3>
-                <p className="font-body text-muted-foreground leading-relaxed">{feature.description}</p>
-              </motion.div>
-            ))}
+                {availableLanguages.map((language) => (
+                  <option key={language} value={language}>
+                    {language === "all" ? "All Languages" : language}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedGenre}
+                onChange={(event) => setSelectedGenre(event.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {availableGenres.map((genre) => (
+                  <option key={genre} value={genre}>
+                    {genre === "all" ? "All Genres" : genre}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* How It Works */}
-      <section id="workflow" className="py-20 md:py-32">
+      <section className="py-10">
         <div className="container mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-16"
-          >
-            <p className="text-primary font-body font-semibold tracking-widest uppercase text-sm mb-3">Simple Workflow</p>
-            <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
-              From Idea to Final Draft
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="font-display text-3xl flex items-center gap-2">
+              <Sparkles className="h-6 w-6 text-primary" />
+              {user ? "Recommended for You" : "Editor's Picks"}
             </h2>
-          </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 max-w-4xl mx-auto">
-            {[
-              { step: "01", title: "Create or Upload", desc: "Start a new story or playscript, or upload existing files." },
-              { step: "02", title: "Write & Organize", desc: "Use specialized editors with auto-save and version history." },
-              { step: "03", title: "Export & Share", desc: "Export to any format or share with collaborators securely." },
-            ].map((item, i) => (
-              <motion.div
-                key={item.step}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.15 }}
-                className="text-center"
-              >
-                <div className="font-display text-6xl font-bold text-primary/20 mb-4">{item.step}</div>
-                <h3 className="font-display text-xl font-semibold text-foreground mb-2">{item.title}</h3>
-                <p className="font-body text-muted-foreground">{item.desc}</p>
-              </motion.div>
-            ))}
+            <Badge variant="outline">{recommendedStories.length} stories</Badge>
           </div>
+
+          {publicLoading ? (
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <Spinner />
+              Loading recommendations...
+            </div>
+          ) : recommendedStories.length > 0 ? (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {recommendedStories.map((story) => (
+                <StoryCard key={story.id} work={story} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+              No public stories match your current filters.
+            </div>
+          )}
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 md:py-32 bg-card">
+      <section className="py-10">
         <div className="container mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="max-w-2xl mx-auto text-center"
-          >
-            <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-6">
-              Ready to Forge Your Story?
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="font-display text-3xl flex items-center gap-2">
+              <Flame className="h-6 w-6 text-primary" />
+              Trending Now
             </h2>
-            <p className="font-body text-lg text-muted-foreground mb-10">
-              Join writers who trust StoryForge to keep their words safe, organized, and beautifully formatted.
-            </p>
-            <Button size="lg" className="text-base px-10 py-6" asChild>
-              <Link to="/dashboard">Get Started — It's Free</Link>
+            <Badge variant="outline">{trendingStories.length} stories</Badge>
+          </div>
+
+          {trendingStories.length > 0 ? (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {trendingStories.map((story) => (
+                <StoryCard key={story.id} work={story} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+              No trending stories yet. Publish a public story to appear here.
+            </div>
+          )}
+        </div>
+      </section>
+
+      {user && (
+        <section className="py-10">
+          <div className="container mx-auto px-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-display text-3xl">Continue Reading</h2>
+              <Button variant="ghost" asChild>
+                <Link to="/dashboard">Open Dashboard</Link>
+              </Button>
+            </div>
+
+            {continueReading.length > 0 ? (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {continueReading.map((story) => (
+                  <StoryCard key={story.id} work={story} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+                You have not started any stories yet.
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className="py-16">
+        <div className="container mx-auto px-6">
+          <div className="rounded-lg border border-border bg-card p-8 md:p-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div>
+              <h3 className="font-display text-3xl mb-2">Ready to publish your next chapter?</h3>
+              <p className="text-muted-foreground">
+                Create a story, write chapter by chapter, then make it public for discovery.
+              </p>
+            </div>
+            <Button size="lg" asChild>
+              <Link to={user ? "/dashboard" : "/signup"}>Start Writing</Link>
             </Button>
-          </motion.div>
+          </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-border py-10">
-        <div className="container mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+      <footer className="border-t border-border py-8">
+        <div className="container mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <BookOpen className="h-5 w-5 text-primary" />
-            <span className="font-display text-lg font-bold text-foreground">StoryForge</span>
+            <span className="font-display text-lg font-semibold">StoryForge</span>
           </div>
-          <p className="font-body text-sm text-muted-foreground">
-            © 2026 StoryForge. Crafted for storytellers.
-          </p>
+          <div className="text-sm text-muted-foreground">
+            © 2026 StoryForge · About · Terms · Help
+          </div>
         </div>
       </footer>
     </div>

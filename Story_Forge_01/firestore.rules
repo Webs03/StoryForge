@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isReadCountIncrementOnly() {
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly(['reads']) &&
+        request.resource.data.reads is int &&
+        resource.data.reads is int &&
+        request.resource.data.reads == resource.data.reads + 1;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) && request.resource.data.uid == uid;
+      allow update, delete: if isOwner(uid);
+    }
+
+    match /documents/{docId} {
+      allow read: if resource.data.isPublic == true || isOwner(resource.data.owner);
+
+      allow create: if signedIn()
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+
+      allow update, delete: if isOwner(resource.data.owner);
+
+      // Allow anonymous/public read count increments on public stories only.
+      allow update: if resource.data.isPublic == true && isReadCountIncrementOnly();
+    }
+  }
+}
