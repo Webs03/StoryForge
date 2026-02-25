@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -48,6 +49,17 @@ const features = [
 ];
 
 type CoverFormat = "Story" | "Playscript";
+
+type TrendingItem = {
+  title: string;
+  category: string;
+  format: CoverFormat;
+  reads: string;
+  imageSrc: string;
+  href?: string;
+  score?: number;
+  source?: string;
+};
 
 const buildCoverImage = (
   format: CoverFormat,
@@ -101,6 +113,26 @@ const buildCoverImage = (
 
 const onlineImageFallback = buildCoverImage("Story", "#f97316", "#fb923c", "#ffedd5");
 
+const storyCoverPalettes = [
+  ["#f97316", "#fb923c", "#ffedd5"],
+  ["#be185d", "#f472b6", "#fce7f3"],
+  ["#6d28d9", "#a78bfa", "#ede9fe"],
+] as const;
+
+const playscriptCoverPalettes = [
+  ["#2563eb", "#60a5fa", "#dbeafe"],
+  ["#1d4ed8", "#93c5fd", "#dbeafe"],
+  ["#4338ca", "#818cf8", "#e0e7ff"],
+] as const;
+
+const getGeneratedCover = (format: CoverFormat, index: number) => {
+  const palette =
+    format === "Story"
+      ? storyCoverPalettes[index % storyCoverPalettes.length]
+      : playscriptCoverPalettes[index % playscriptCoverPalettes.length];
+  return buildCoverImage(format, palette[0], palette[1], palette[2]);
+};
+
 const recommendedTopics = [
   {
     title: "Short Story Arcs",
@@ -122,7 +154,7 @@ const recommendedTopics = [
   },
 ];
 
-const trendingNow = [
+const fallbackTrendingNow: TrendingItem[] = [
   {
     title: "When the City Forgets",
     category: "Mystery Story",
@@ -175,6 +207,94 @@ const editorsPick = [
 ];
 
 const LandingPage = () => {
+  const [trendingItems, setTrendingItems] = useState<TrendingItem[]>(fallbackTrendingNow);
+  const [trendingState, setTrendingState] = useState<"loading" | "live" | "fallback">("loading");
+  const [trendingUpdatedAt, setTrendingUpdatedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchLiveTrending = async () => {
+      try {
+        const sources: Array<{ url: string; format: CoverFormat }> = [
+          { url: "https://www.reddit.com/r/WritingPrompts/top.json?t=day&limit=8", format: "Story" },
+          { url: "https://www.reddit.com/r/shortstories/top.json?t=day&limit=8", format: "Story" },
+          { url: "https://www.reddit.com/r/Screenwriting/top.json?t=day&limit=8", format: "Playscript" },
+        ];
+
+        const responses = await Promise.allSettled(
+          sources.map(async (source) => {
+            const response = await fetch(source.url);
+            if (!response.ok) return [];
+            const payload = (await response.json()) as {
+              data?: { children?: Array<{ data?: Record<string, unknown> }> };
+            };
+            const children = payload.data?.children ?? [];
+            return children.map((entry) => ({ source, post: entry.data ?? {} }));
+          })
+        );
+
+        const collected = responses.flatMap((result) =>
+          result.status === "fulfilled" ? result.value : []
+        );
+
+        const liveItems: TrendingItem[] = collected
+          .map(({ source, post }, index) => {
+            const title = typeof post.title === "string" ? post.title : "";
+            const subreddit =
+              typeof post.subreddit === "string" ? post.subreddit : "writing";
+            const permalink =
+              typeof post.permalink === "string" ? post.permalink : "";
+            const ups = typeof post.ups === "number" ? post.ups : 0;
+            const thumbnail =
+              typeof post.thumbnail === "string" &&
+              /^https?:\/\//.test(post.thumbnail)
+                ? post.thumbnail
+                : getGeneratedCover(source.format, index);
+            const isPinned = Boolean(post.stickied);
+            const isRemoved = title.toLowerCase().includes("[removed]");
+
+            if (!title || !permalink || isPinned || isRemoved) return null;
+
+            return {
+              title,
+              category: `r/${subreddit}`,
+              format: source.format,
+              reads: `${ups.toLocaleString()} upvotes`,
+              imageSrc: thumbnail,
+              href: `https://www.reddit.com${permalink}`,
+              score: ups,
+              source: "Reddit",
+            } satisfies TrendingItem;
+          })
+          .filter((item): item is TrendingItem => item !== null)
+          .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+          .slice(0, 4);
+
+        if (cancelled) return;
+
+        if (liveItems.length > 0) {
+          setTrendingItems(liveItems);
+          setTrendingState("live");
+          setTrendingUpdatedAt(new Date().toISOString());
+          return;
+        }
+
+        setTrendingItems(fallbackTrendingNow);
+        setTrendingState("fallback");
+      } catch {
+        if (cancelled) return;
+        setTrendingItems(fallbackTrendingNow);
+        setTrendingState("fallback");
+      }
+    };
+
+    void fetchLiveTrending();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Navigation */}
@@ -219,7 +339,7 @@ const LandingPage = () => {
               Read. Write. Publish.
             </p>
             <h1 className="font-display text-5xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6 text-balance">
-              Your Stories and Playscripts, in One Bright Creative Home
+              Discover stories, keep your reading flow, and publish your own chapters.
             </h1>
             <p className="font-body text-lg md:text-xl text-muted-foreground max-w-xl mb-10 leading-relaxed">
               Build episodes, draft scenes, and publish faster with a writer-first platform designed to feel familiar to story readers and serial fiction creators.
@@ -257,7 +377,7 @@ const LandingPage = () => {
               <span className="text-xs text-muted-foreground font-body">Updated Live</span>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {trendingNow.map((story) => (
+              {trendingItems.map((story) => (
                 <article
                   key={`${story.title}-shelf`}
                   className="rounded-xl overflow-hidden border border-border bg-background shadow-sm"
@@ -300,17 +420,27 @@ const LandingPage = () => {
             <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
               Trending Now
             </h2>
+            <p className="font-body text-sm text-muted-foreground mt-2">
+              {trendingState === "live" && trendingUpdatedAt
+                ? `Live from Reddit · Updated ${new Date(trendingUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                : trendingState === "loading"
+                  ? "Loading live trends..."
+                  : "Showing curated picks while live trends are unavailable."}
+            </p>
           </motion.div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-14">
-            {trendingNow.map((story, i) => (
-              <motion.article
+            {trendingItems.map((story, i) => (
+              <motion.a
                 key={story.title}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: i * 0.08 }}
                 className="rounded-xl overflow-hidden border border-border bg-background group hover:border-primary/30 transition-colors"
+                href={story.href}
+                target={story.href ? "_blank" : undefined}
+                rel={story.href ? "noreferrer" : undefined}
               >
                 <div className="relative aspect-[3/4] overflow-hidden">
                   <img
@@ -330,10 +460,13 @@ const LandingPage = () => {
                       {story.format}
                     </div>
                     <h3 className="font-display text-xl font-semibold text-white mb-1 leading-tight">{story.title}</h3>
-                    <p className="font-body text-xs text-white/80">{story.category} · {story.reads}</p>
+                    <p className="font-body text-xs text-white/80">
+                      {story.category} · {story.reads}
+                      {story.source ? ` · ${story.source}` : ""}
+                    </p>
                   </div>
                 </div>
-              </motion.article>
+              </motion.a>
             ))}
           </div>
 
