@@ -14,6 +14,17 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import heroImage from "@/assets/hero-image.jpg";
+import tellTaleHeartCover from "@/assets/covers/tell-tale-heart.svg";
+import hamletCover from "@/assets/covers/hamlet.svg";
+import giftOfTheMagiCover from "@/assets/covers/gift-of-the-magi.svg";
+import theLotteryCover from "@/assets/covers/the-lottery.svg";
+import aRaisinInTheSunCover from "@/assets/covers/a-raisin-in-the-sun.svg";
+import yellowWallpaperCover from "@/assets/covers/yellow-wallpaper.svg";
+import aDollsHouseCover from "@/assets/covers/a-dolls-house.svg";
+import lastLeafCover from "@/assets/covers/last-leaf.svg";
+import deathOfASalesmanCover from "@/assets/covers/death-of-a-salesman.svg";
+import romeoAndJulietCover from "@/assets/covers/romeo-and-juliet.svg";
+import fallbackCover from "@/assets/covers/fallback-cover.svg";
 
 const features = [
   {
@@ -61,148 +72,99 @@ type TrendingItem = {
   source?: string;
 };
 
-const buildCoverImage = (
-  format: CoverFormat,
-  toneA: string,
-  toneB: string,
-  highlight: string
-) => {
-  const motif =
-    format === "Story"
-      ? `
-        <rect x="168" y="248" width="122" height="166" rx="14" fill="rgba(255,255,255,0.2)" />
-        <rect x="310" y="248" width="122" height="166" rx="14" fill="rgba(255,255,255,0.2)" />
-        <rect x="295" y="248" width="10" height="166" rx="5" fill="rgba(255,255,255,0.35)" />
-        <rect x="186" y="280" width="86" height="10" rx="5" fill="rgba(255,255,255,0.7)" />
-        <rect x="186" y="304" width="72" height="9" rx="4.5" fill="rgba(255,255,255,0.45)" />
-        <rect x="328" y="280" width="86" height="10" rx="5" fill="rgba(255,255,255,0.7)" />
-        <rect x="328" y="304" width="72" height="9" rx="4.5" fill="rgba(255,255,255,0.45)" />
-      `
-      : `
-        <rect x="196" y="226" width="208" height="266" rx="18" fill="rgba(255,255,255,0.22)" />
-        <rect x="226" y="272" width="148" height="10" rx="5" fill="rgba(255,255,255,0.72)" />
-        <rect x="226" y="300" width="122" height="8" rx="4" fill="rgba(255,255,255,0.5)" />
-        <rect x="226" y="338" width="136" height="8" rx="4" fill="rgba(255,255,255,0.5)" />
-        <rect x="226" y="366" width="112" height="8" rx="4" fill="rgba(255,255,255,0.5)" />
-        <rect x="226" y="404" width="146" height="8" rx="4" fill="rgba(255,255,255,0.5)" />
-      `;
+const onlineImageFallback = fallbackCover;
 
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900">
-      <defs>
-        <linearGradient id="coverGradient" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="${toneA}" />
-          <stop offset="100%" stop-color="${toneB}" />
-        </linearGradient>
-      </defs>
-      <rect width="600" height="900" fill="url(#coverGradient)" />
-      <circle cx="108" cy="120" r="146" fill="rgba(255,255,255,0.16)" />
-      <circle cx="532" cy="802" r="186" fill="rgba(255,255,255,0.12)" />
-      <rect x="34" y="34" width="532" height="832" rx="30" fill="none" stroke="rgba(255,255,255,0.34)" stroke-width="2" />
-      <rect x="70" y="84" width="186" height="44" rx="22" fill="${highlight}" />
-      <text x="163" y="111" text-anchor="middle" font-size="20" font-family="Source Sans 3, Arial, sans-serif" font-weight="700" fill="#20222e">${format.toUpperCase()}</text>
-      ${motif}
-      <rect x="138" y="598" width="324" height="8" rx="4" fill="rgba(255,255,255,0.78)" />
-      <rect x="138" y="628" width="278" height="8" rx="4" fill="rgba(255,255,255,0.56)" />
-      <rect x="138" y="658" width="242" height="8" rx="4" fill="rgba(255,255,255,0.56)" />
-    </svg>
-  `;
+const storyGeneratedCovers = [
+  tellTaleHeartCover,
+  giftOfTheMagiCover,
+  theLotteryCover,
+  yellowWallpaperCover,
+  lastLeafCover,
+];
 
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-};
-
-const onlineImageFallback = buildCoverImage("Story", "#f97316", "#fb923c", "#ffedd5");
-
-const storyCoverPalettes = [
-  ["#f97316", "#fb923c", "#ffedd5"],
-  ["#be185d", "#f472b6", "#fce7f3"],
-  ["#6d28d9", "#a78bfa", "#ede9fe"],
-] as const;
-
-const playscriptCoverPalettes = [
-  ["#2563eb", "#60a5fa", "#dbeafe"],
-  ["#1d4ed8", "#93c5fd", "#dbeafe"],
-  ["#4338ca", "#818cf8", "#e0e7ff"],
-] as const;
+const playscriptGeneratedCovers = [
+  hamletCover,
+  aRaisinInTheSunCover,
+  aDollsHouseCover,
+  deathOfASalesmanCover,
+  romeoAndJulietCover,
+];
 
 const getGeneratedCover = (format: CoverFormat, index: number) => {
-  const palette =
-    format === "Story"
-      ? storyCoverPalettes[index % storyCoverPalettes.length]
-      : playscriptCoverPalettes[index % playscriptCoverPalettes.length];
-  return buildCoverImage(format, palette[0], palette[1], palette[2]);
+  const coverSet = format === "Story" ? storyGeneratedCovers : playscriptGeneratedCovers;
+  return coverSet[index % coverSet.length] ?? onlineImageFallback;
 };
 
 const recommendedTopics = [
   {
-    title: "Short Story Arcs",
+    title: "The Tell-Tale Heart",
     format: "Story",
-    description: "Discover high-performing structures for flash fiction and serialized short stories.",
-    imageSrc: buildCoverImage("Story", "#ea580c", "#fb923c", "#ffedd5"),
+    description: "Edgar Allan Poe's suspense classic with an unreliable narrator and mounting guilt.",
+    imageSrc: tellTaleHeartCover,
   },
   {
-    title: "Playscript Dialogue",
+    title: "Hamlet",
     format: "Playscript",
-    description: "Learn stage-ready dialogue pacing, scene transitions, and character blocking cues.",
-    imageSrc: buildCoverImage("Playscript", "#2563eb", "#60a5fa", "#dbeafe"),
+    description: "Shakespeare's iconic tragedy of power, grief, and moral uncertainty.",
+    imageSrc: hamletCover,
   },
   {
-    title: "Romance Beats",
+    title: "The Gift of the Magi",
     format: "Story",
-    description: "Blend emotional tension and character growth to keep readers hooked chapter by chapter.",
-    imageSrc: buildCoverImage("Story", "#be185d", "#f472b6", "#fce7f3"),
+    description: "O. Henry's timeless short story of sacrifice, love, and irony.",
+    imageSrc: giftOfTheMagiCover,
   },
 ];
 
 const fallbackTrendingNow: TrendingItem[] = [
   {
-    title: "When the City Forgets",
-    category: "Mystery Story",
+    title: "The Lottery",
+    category: "Classic Story",
     format: "Story",
-    reads: "24.1K reads",
-    imageSrc: buildCoverImage("Story", "#f97316", "#fb923c", "#ffedd5"),
+    reads: "By Shirley Jackson",
+    imageSrc: theLotteryCover,
   },
   {
-    title: "Orbit of Silence: Act I",
-    category: "Sci-Fi Stage Drama",
+    title: "A Raisin in the Sun",
+    category: "Classic Playscript",
     format: "Playscript",
-    reads: "18.6K reads",
-    imageSrc: buildCoverImage("Playscript", "#2563eb", "#60a5fa", "#dbeafe"),
+    reads: "By Lorraine Hansberry",
+    imageSrc: aRaisinInTheSunCover,
   },
   {
-    title: "The Orchard at Dusk",
-    category: "Romance Story",
+    title: "The Yellow Wallpaper",
+    category: "Classic Story",
     format: "Story",
-    reads: "16.3K reads",
-    imageSrc: buildCoverImage("Story", "#be185d", "#f472b6", "#fce7f3"),
+    reads: "By Charlotte Perkins Gilman",
+    imageSrc: yellowWallpaperCover,
   },
   {
-    title: "Room 307: Stage Cut",
-    category: "Thriller Playscript",
+    title: "A Doll's House",
+    category: "Classic Playscript",
     format: "Playscript",
-    reads: "21.9K reads",
-    imageSrc: buildCoverImage("Playscript", "#4338ca", "#818cf8", "#e0e7ff"),
+    reads: "By Henrik Ibsen",
+    imageSrc: aDollsHouseCover,
   },
 ];
 
 const editorsPick = [
   {
-    title: "Ashes of the Last Kingdom",
-    category: "Fantasy",
-    blurb: "A sharp political fantasy with layered worldbuilding and a memorable protagonist voice.",
-    imageSrc: buildCoverImage("Story", "#c2410c", "#fb923c", "#ffedd5"),
+    title: "The Last Leaf",
+    category: "Story · O. Henry",
+    blurb: "A beloved short story known for emotional restraint, precise pacing, and a memorable ending.",
+    imageSrc: lastLeafCover,
   },
   {
-    title: "Exit Left, Sunrise",
-    category: "Contemporary Playscript",
-    blurb: "A dialogue-first script with precise stage direction and emotionally grounded scene breaks.",
-    imageSrc: buildCoverImage("Playscript", "#1d4ed8", "#60a5fa", "#dbeafe"),
+    title: "Death of a Salesman",
+    category: "Playscript · Arthur Miller",
+    blurb: "A modern theater landmark blending realism, memory, and sharp character conflict.",
+    imageSrc: deathOfASalesmanCover,
   },
   {
-    title: "Hollow Frequency",
-    category: "Horror",
-    blurb: "Smart pacing, excellent tension control, and an ending that lands without over-explaining.",
-    imageSrc: buildCoverImage("Story", "#7c3aed", "#a78bfa", "#ede9fe"),
+    title: "Romeo and Juliet",
+    category: "Playscript · William Shakespeare",
+    blurb: "A canonical tragedy with enduring themes of love, conflict, and fate.",
+    imageSrc: romeoAndJulietCover,
   },
 ];
 
