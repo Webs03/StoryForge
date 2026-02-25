@@ -1,10 +1,16 @@
-// Import the functions you need from the SDKs you've installed
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp, type FirebaseApp } from "firebase/app";
+import { getAuth, type Auth } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
 
-// TODO: Add your Firebase config here
-// Get this from your Firebase Console: https://console.firebase.google.com/
+const requiredEnvVars = [
+  "VITE_FIREBASE_API_KEY",
+  "VITE_FIREBASE_AUTH_DOMAIN",
+  "VITE_FIREBASE_PROJECT_ID",
+  "VITE_FIREBASE_STORAGE_BUCKET",
+  "VITE_FIREBASE_MESSAGING_SENDER_ID",
+  "VITE_FIREBASE_APP_ID",
+] as const;
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -14,15 +20,31 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Debug: print config values
-console.log("Firebase config:", firebaseConfig);
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+const missingFirebaseEnvVars = requiredEnvVars.filter((key) => {
+  const value = import.meta.env[key];
+  return typeof value !== "string" || value.trim().length === 0;
+});
 
-// Initialize Firebase Authentication and get a reference to the service
-export const auth = getAuth(app);
+export let app: FirebaseApp | null = null;
+export let auth: Auth | null = null;
+export let db: Firestore | null = null;
+export let firebaseInitError: string | null = null;
 
-// Initialize Cloud Firestore and get a reference to the service
-export const db = getFirestore(app);
+if (missingFirebaseEnvVars.length > 0) {
+  firebaseInitError = `Missing Firebase environment variables: ${missingFirebaseEnvVars.join(", ")}`;
+  console.warn(firebaseInitError);
+} else {
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } catch (err) {
+    firebaseInitError =
+      err instanceof Error ? err.message : "Failed to initialize Firebase";
+    console.error("Firebase initialization error:", err);
+  }
+}
+
+export const isFirebaseConfigured = firebaseInitError === null;
 
 export default app;

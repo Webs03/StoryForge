@@ -10,17 +10,42 @@ import {
   where,
   Timestamp,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, firebaseInitError } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
+
+export type DocumentType = "story" | "playscript";
+export type DocumentStatus = "Draft" | "Editing" | "Final";
 
 export interface Document {
   id: string;
   title: string;
   content: string;
   owner: string;
+  type: DocumentType;
+  status: DocumentStatus;
+  genre: string;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const parseDate = (value: unknown): Date => {
+  if (value instanceof Date) return value;
+  if (value instanceof Timestamp) return value.toDate();
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+};
+
+const parseType = (value: unknown): DocumentType =>
+  value === "playscript" ? "playscript" : "story";
+
+const parseStatus = (value: unknown): DocumentStatus => {
+  if (value === "Editing") return "Editing";
+  if (value === "Final") return "Final";
+  return "Draft";
+};
 
 export const useDocuments = () => {
   const { user } = useAuth();
@@ -28,8 +53,22 @@ export const useDocuments = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const getDbInstance = () => {
+    if (!db) {
+      throw new Error(firebaseInitError ?? "Firestore is not configured");
+    }
+    return db;
+  };
+
   // Fetch user's documents
   useEffect(() => {
+    if (!db) {
+      setDocuments([]);
+      setError(firebaseInitError ?? "Firestore is not configured");
+      setLoading(false);
+      return;
+    }
+
     if (!user) {
       setDocuments([]);
       setLoading(false);
@@ -39,18 +78,28 @@ export const useDocuments = () => {
     const fetchDocuments = async () => {
       try {
         setLoading(true);
+        const firestore = getDbInstance();
         const q = query(
-          collection(db, "documents"),
+          collection(firestore, "documents"),
           where("owner", "==", user.uid)
         );
         const querySnapshot = await getDocs(q);
         const docs: Document[] = [];
-        querySnapshot.forEach((doc) => {
+        querySnapshot.forEach((item) => {
+          const data = item.data();
           docs.push({
-            id: doc.id,
-            ...(doc.data() as Omit<Document, "id">),
+            id: item.id,
+            title: typeof data.title === "string" ? data.title : "Untitled",
+            content: typeof data.content === "string" ? data.content : "",
+            owner: typeof data.owner === "string" ? data.owner : user.uid,
+            type: parseType(data.type),
+            status: parseStatus(data.status),
+            genre: typeof data.genre === "string" ? data.genre : "Uncategorized",
+            createdAt: parseDate(data.createdAt),
+            updatedAt: parseDate(data.updatedAt),
           });
         });
+        docs.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
         setDocuments(docs);
         setError(null);
       } catch (err) {
@@ -64,17 +113,47 @@ export const useDocuments = () => {
   }, [user]);
 
   // Create new document
-  const createDocument = async (title: string, content: string = "") => {
+  const createDocument = async (
+    title: string,
+    content: string = "",
+    options?: { type?: DocumentType; status?: DocumentStatus; genre?: string }
+  ) => {
     if (!user) throw new Error("User not authenticated");
-    
+    const firestore = getDbInstance();
+
+    const now = Timestamp.now();
+    const type = options?.type ?? "story";
+    const status = options?.status ?? "Draft";
+    const genre = options?.genre ?? "Uncategorized";
+
     try {
-      const docRef = await addDoc(collection(db, "documents"), {
+      const docRef = await addDoc(collection(firestore, "documents"), {
         title,
         content,
         owner: user.uid,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        type,
+        status,
+        genre,
+        createdAt: now,
+        updatedAt: now,
       });
+
+      const createdAt = now.toDate();
+      setDocuments((previous) => [
+        {
+          id: docRef.id,
+          title,
+          content,
+          owner: user.uid,
+          type,
+          status,
+          genre,
+          createdAt,
+          updatedAt: createdAt,
+        },
+        ...previous,
+      ]);
+
       return docRef.id;
     } catch (err) {
       throw err instanceof Error ? err : new Error("Failed to create document");
@@ -84,13 +163,24 @@ export const useDocuments = () => {
   // Update document
   const updateDocument = async (docId: string, title: string, content: string) => {
     if (!user) throw new Error("User not authenticated");
-    
+    const firestore = getDbInstance();
+
     try {
-      const docRef = doc(db, "documents", docId);
+      const docRef = doc(firestore, "documents", docId);
+      const now = Timestamp.now();
       await updateDoc(docRef, {
         title,
         content,
-        updatedAt: Timestamp.now(),
+        updatedAt: now,
+      });
+
+      const updatedAt = now.toDate();
+      setDocuments((previous) => {
+        const updated = previous.map((item) =>
+          item.id === docId ? { ...item, title, content, updatedAt } : item
+        );
+        updated.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        return updated;
       });
     } catch (err) {
       throw err instanceof Error ? err : new Error("Failed to update document");
@@ -100,10 +190,11 @@ export const useDocuments = () => {
   // Delete document
   const deleteDocument = async (docId: string) => {
     if (!user) throw new Error("User not authenticated");
-    
+    const firestore = getDbInstance();
+
     try {
-      await deleteDoc(doc(db, "documents", docId));
-      setDocuments(documents.filter((d) => d.id !== docId));
+      await deleteDoc(doc(firestore, "documents", docId));
+      setDocuments((previous) => previous.filter((item) => item.id !== docId));
     } catch (err) {
       throw err instanceof Error ? err : new Error("Failed to delete document");
     }

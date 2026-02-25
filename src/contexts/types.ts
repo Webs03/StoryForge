@@ -5,6 +5,8 @@ export interface UserProfile {
   email: string;
   name: string;
   createdAt: string;
+  lastSignInAt?: string;
+  photoURL?: string | null;
 }
 
 export interface AuthContextType {

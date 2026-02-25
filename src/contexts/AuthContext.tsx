@@ -6,9 +6,8 @@ import {
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
-import { auth } from "@/lib/firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db, firebaseInitError } from "@/lib/firebase";
 import { AuthContext } from "./auth-context";
 import type { UserProfile, AuthContextType } from "./types";
 
@@ -23,55 +22,113 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchUserProfile = async (uid: string) => {
+  const getDefaultName = (currentUser: User) => {
+    if (currentUser.displayName?.trim()) return currentUser.displayName.trim();
+    if (currentUser.email?.includes("@")) return currentUser.email.split("@")[0];
+    return "Writer";
+  };
+
+  const getAuthInstance = () => {
+    if (!auth) {
+      throw new Error(firebaseInitError ?? "Firebase authentication is not configured");
+    }
+    return auth;
+  };
+
+  const getDbInstance = () => {
+    if (!db) {
+      throw new Error(firebaseInitError ?? "Firestore is not configured");
+    }
+    return db;
+  };
+
+  const upsertUserProfile = async (
+    currentUser: User,
+    preferredName?: string,
+    options?: { touchLastSignIn?: boolean }
+  ) => {
     try {
-      const docRef = doc(db, "users", uid);
+      const touchLastSignIn = options?.touchLastSignIn ?? false;
+      const firestore = getDbInstance();
+      const docRef = doc(firestore, "users", currentUser.uid);
+      const docSnap = await getDoc(docRef);
+      const existingProfile = docSnap.exists()
+        ? (docSnap.data() as Partial<UserProfile>)
+        : null;
+
+      const profile: UserProfile = {
+        uid: currentUser.uid,
+        email: currentUser.email ?? existingProfile?.email ?? "",
+        name: preferredName?.trim() || existingProfile?.name || getDefaultName(currentUser),
+        createdAt: existingProfile?.createdAt || new Date().toISOString(),
+        lastSignInAt: touchLastSignIn
+          ? new Date().toISOString()
+          : existingProfile?.lastSignInAt,
+        photoURL: currentUser.photoURL ?? existingProfile?.photoURL ?? null,
+      };
+
+      setUserProfile(profile);
+      await setDoc(docRef, profile, { merge: true });
+      return profile;
+    } catch (err) {
+      console.error("Error upserting user profile:", err);
+      throw err;
+    }
+  };
+
+  const fetchUserProfile = async (currentUser: User) => {
+    try {
+      const firestore = getDbInstance();
+      const docRef = doc(firestore, "users", currentUser.uid);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         setUserProfile(docSnap.data() as UserProfile);
-      } else {
-        setUserProfile(null);
+        return;
       }
+
+      await upsertUserProfile(currentUser);
     } catch (err) {
-      console.error("Error fetching user profile:", err);
+      console.error("Failed to fetch user profile:", err);
     }
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        // Do not block auth readiness on Firestore latency.
-        void fetchUserProfile(currentUser.uid);
-      } else {
-        setUser(null);
-        setUserProfile(null);
-      }
+    if (!auth) {
+      setError(firebaseInitError ?? "Firebase authentication is not configured");
       setLoading(false);
-    });
+      return () => undefined;
+    }
 
-    return () => unsubscribe();
+    try {
+      const authInstance = getAuthInstance();
+      const unsubscribe = onAuthStateChanged(authInstance, (currentUser) => {
+        if (currentUser) {
+          setUser(currentUser);
+          // Do not block auth readiness on Firestore latency.
+          void fetchUserProfile(currentUser);
+        } else {
+          setUser(null);
+          setUserProfile(null);
+        }
+        setLoading(false);
+      });
+
+      return () => unsubscribe();
+    } catch (err) {
+      console.error("Failed to initialize auth state listener:", err);
+      setError(err instanceof Error ? err.message : "Failed to initialize authentication");
+      setLoading(false);
+    }
+
+    return () => undefined;
   }, []);
 
   const signUp = async (email: string, password: string, name: string) => {
     try {
       setError(null);
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-
-      // Prepare and set UI profile immediately.
-      const userProfile: UserProfile = {
-        uid: result.user.uid,
-        email: result.user.email!,
-        name,
-        createdAt: new Date().toISOString(),
-      };
-
-      setUserProfile(userProfile);
-
-      // Do not block navigation on Firestore profile write.
-      void setDoc(doc(db, "users", result.user.uid), userProfile).catch((err) => {
-        console.error("Error saving user profile:", err);
-      });
+      const authInstance = getAuthInstance();
+      const result = await createUserWithEmailAndPassword(authInstance, email, password);
+      await upsertUserProfile(result.user, name, { touchLastSignIn: true });
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to sign up";
@@ -83,10 +140,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const signIn = async (email: string, password: string) => {
     try {
       setError(null);
-      const result = await signInWithEmailAndPassword(auth, email, password);
-
-      // Fetch profile in background to keep sign-in responsive.
-      void fetchUserProfile(result.user.uid);
+      const authInstance = getAuthInstance();
+      const result = await signInWithEmailAndPassword(authInstance, email, password);
+      // Ensure user profile exists and refresh login timestamp.
+      await upsertUserProfile(result.user, undefined, { touchLastSignIn: true });
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to sign in";
@@ -98,7 +155,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const logOut = async () => {
     try {
       setError(null);
-      await signOut(auth);
+      const authInstance = getAuthInstance();
+      await signOut(authInstance);
       setUser(null);
       setUserProfile(null);
     } catch (err) {

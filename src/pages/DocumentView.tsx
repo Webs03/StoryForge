@@ -1,38 +1,126 @@
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  BookOpen, ArrowLeft, Save, Download, Share2, Clock,
-  FileText, Theater, ChevronDown, Bold, Italic, AlignLeft,
-  AlignCenter, List, Heading1, Heading2, Minus
+  ArrowLeft,
+  Save,
+  Download,
+  Share2,
+  Clock,
+  FileText,
+  Theater,
+  Bold,
+  Italic,
+  AlignLeft,
+  AlignCenter,
+  List,
+  Heading1,
+  Heading2,
+  Minus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { useDocuments } from "@/hooks/use-documents";
 
-const mockDocument = {
-  id: "1",
-  title: "The Last Lighthouse Keeper",
-  type: "story" as const,
-  status: "Editing" as const,
-  wordCount: 4280,
-  genre: "Literary Fiction",
-  updatedAt: "2 hours ago",
-  versions: 12,
-  content: `The fog rolled in at dusk, thick as wool, swallowing the coastline whole. Elias stood at the top of the lighthouse, hands wrapped around his coffee mug, watching the world disappear.
-
-He had been keeper for thirty-seven years. Thirty-seven years of wind and salt and the rhythmic sweep of the beam across dark water. The lighthouse was more than a building to him — it was a companion, a confidant, the only thing that had never left.
-
-"They're closing us down," the letter had said. Three sentences. Typed, not handwritten. No one writes by hand anymore, Elias thought. Not even when they're ending someone's life.
-
-The fog horn sounded — low, mournful, a sound that lived in his bones. He wondered if the ships would miss it. He wondered if anyone would miss him.
-
-Below, the waves crashed against the rocks in their eternal argument with the shore. Elias set down his mug and began his final inspection of the light.`,
+const formatRelativeTime = (value: Date) => {
+  const diff = Date.now() - value.getTime();
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  if (diff < minute) return "just now";
+  if (diff < hour) return `${Math.floor(diff / minute)}m ago`;
+  if (diff < day) return `${Math.floor(diff / hour)}h ago`;
+  if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
+  return value.toLocaleDateString();
 };
 
 const DocumentView = () => {
   const { id } = useParams();
-  const doc = mockDocument;
-  const isPlayscript = (doc.type as string) === "playscript";
+  const { documents, loading, error, updateDocument } = useDocuments();
+  const [titleDraft, setTitleDraft] = useState("");
+  const [contentDraft, setContentDraft] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const document = useMemo(
+    () => documents.find((item) => item.id === id) ?? null,
+    [documents, id]
+  );
+
+  useEffect(() => {
+    if (!document) return;
+    setTitleDraft(document.title);
+    setContentDraft(document.content);
+  }, [document]);
+
+  const hasUnsavedChanges =
+    !!document &&
+    (titleDraft !== document.title || contentDraft !== document.content);
+
+  const wordCount = contentDraft.trim()
+    ? contentDraft.trim().split(/\s+/).length
+    : 0;
+  const readMinutes = Math.max(1, Math.ceil(wordCount / 250));
+  const isPlayscript = document?.type === "playscript";
+
+  const handleSave = async () => {
+    if (!document || !hasUnsavedChanges) return;
+
+    try {
+      setSaveError(null);
+      setIsSaving(true);
+      await updateDocument(document.id, titleDraft.trim() || "Untitled", contentDraft);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save document");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex items-center gap-3 text-muted-foreground font-body">
+          <Spinner />
+          <span>Loading document...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-6">
+        <div className="text-center">
+          <p className="font-display text-2xl text-foreground mb-2">Could not load document</p>
+          <p className="font-body text-sm text-muted-foreground mb-6">{error}</p>
+          <Button asChild>
+            <Link to="/dashboard">Back to Dashboard</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!document) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-6">
+        <div className="text-center">
+          <p className="font-display text-2xl text-foreground mb-2">Document not found</p>
+          <p className="font-body text-sm text-muted-foreground mb-6">
+            This document may not exist or may not belong to your account.
+          </p>
+          <Button asChild>
+            <Link to="/dashboard">Back to Dashboard</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -46,13 +134,18 @@ const DocumentView = () => {
             <Separator orientation="vertical" className="h-5" />
             <div className="flex items-center gap-2">
               {isPlayscript ? <Theater className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
-              <span className="font-display font-semibold text-foreground">{doc.title}</span>
+              <span className="font-display font-semibold text-foreground line-clamp-1">{document.title}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="bg-warm-light text-primary text-xs">{doc.status}</Badge>
-            <span className="text-xs text-muted-foreground font-body hidden sm:inline">Saved {doc.updatedAt}</span>
-            <Button variant="ghost" size="sm"><Save className="h-4 w-4" /></Button>
+            <Badge variant="secondary" className="bg-warm-light text-primary text-xs">{document.status}</Badge>
+            <span className="text-xs text-muted-foreground font-body hidden sm:inline">
+              Saved {formatRelativeTime(document.updatedAt)}
+            </span>
+            <Button variant="ghost" size="sm" onClick={handleSave} disabled={!hasUnsavedChanges || isSaving}>
+              <Save className="h-4 w-4 mr-1" />
+              {isSaving ? "Saving..." : "Save"}
+            </Button>
             <Button variant="ghost" size="sm"><Download className="h-4 w-4" /></Button>
             <Button variant="ghost" size="sm"><Share2 className="h-4 w-4" /></Button>
           </div>
@@ -67,12 +160,20 @@ const DocumentView = () => {
           className="mb-8"
         >
           <div className="flex flex-wrap items-center gap-4 text-sm font-body text-muted-foreground mb-6">
-            <span>{doc.genre}</span>
+            <span>{document.genre}</span>
             <span>·</span>
-            <span>{doc.wordCount.toLocaleString()} words</span>
+            <span>{wordCount.toLocaleString()} words</span>
             <span>·</span>
-            <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {doc.versions} versions</span>
+            <span className="flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" /> Updated {formatRelativeTime(document.updatedAt)}
+            </span>
           </div>
+          {saveError && (
+            <p className="font-body text-sm text-destructive">{saveError}</p>
+          )}
+          {!saveError && hasUnsavedChanges && (
+            <p className="font-body text-sm text-muted-foreground">You have unsaved changes.</p>
+          )}
         </motion.div>
 
         {/* Formatting Toolbar */}
@@ -95,16 +196,24 @@ const DocumentView = () => {
           transition={{ delay: 0.2 }}
           className="bg-card rounded-lg border border-border p-8 md:p-12 min-h-[60vh] shadow-sm"
         >
-          <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-8">{doc.title}</h1>
-          <div className="font-body text-foreground/90 leading-[1.9] text-base md:text-lg whitespace-pre-line">
-            {doc.content}
-          </div>
+          <Input
+            value={titleDraft}
+            onChange={(event) => setTitleDraft(event.target.value)}
+            className="font-display text-2xl md:text-3xl font-bold border-0 shadow-none px-0 h-auto mb-6 focus-visible:ring-0"
+            placeholder="Untitled"
+          />
+          <Textarea
+            value={contentDraft}
+            onChange={(event) => setContentDraft(event.target.value)}
+            placeholder="Start writing your story..."
+            className="font-body text-foreground/90 leading-[1.9] text-base md:text-lg min-h-[52vh] border-0 shadow-none resize-none px-0 focus-visible:ring-0"
+          />
         </motion.div>
 
         {/* Bottom Stats */}
         <div className="flex items-center justify-between mt-6 text-xs font-body text-muted-foreground">
           <span>Section 1 of 1</span>
-          <span>{doc.wordCount.toLocaleString()} words · {Math.ceil(doc.wordCount / 250)} min read</span>
+          <span>{wordCount.toLocaleString()} words · {readMinutes} min read</span>
         </div>
       </div>
     </div>

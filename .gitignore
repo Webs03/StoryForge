@@ -11,8 +11,12 @@ __pycache__/
 
 # Node / build artifacts
 node_modules/
-dist
+dist/
 dist-ssr
+
+# Firebase docs
+/FIREBASE*.md
+!/README.md
 
 # Logs
 logs
