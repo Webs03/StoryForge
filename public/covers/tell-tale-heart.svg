@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-label="THE TELL-TALE HEART  cover">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#fb923c"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#g)"/>
+  <rect x="34" y="34" width="532" height="832" rx="30" fill="none" stroke="rgba(255,255,255,0.36)" stroke-width="2"/>
+  <circle cx="92" cy="112" r="138" fill="rgba(255,255,255,0.12)"/>
+  <circle cx="530" cy="796" r="186" fill="rgba(255,255,255,0.10)"/>
+  <rect x="70" y="84" width="190" height="44" rx="22" fill="rgba(255,255,255,0.86)"/>
+  <text x="165" y="111" text-anchor="middle" font-size="19" font-family="Arial, sans-serif" font-weight="700" fill="#1f2937">STORY</text>
+  <text x="300" y="512" text-anchor="middle" font-size="42" font-family="Georgia, serif" font-weight="700" fill="#ffffff">THE TELL-TALE</text>
+  <text x="300" y="560" text-anchor="middle" font-size="42" font-family="Georgia, serif" font-weight="700" fill="#ffffff">HEART</text>
+  <text x="300" y="608" text-anchor="middle" font-size="42" font-family="Georgia, serif" font-weight="700" fill="#ffffff"></text>
+  <text x="300" y="742" text-anchor="middle" font-size="21" font-family="Arial, sans-serif" font-weight="600" fill="rgba(255,255,255,0.92)">Edgar Allan Poe</text>
+</svg>

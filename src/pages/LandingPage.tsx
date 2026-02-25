@@ -14,17 +14,20 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import heroImage from "@/assets/hero-image.jpg";
-import tellTaleHeartCover from "@/assets/covers/tell-tale-heart.svg";
-import hamletCover from "@/assets/covers/hamlet.svg";
-import giftOfTheMagiCover from "@/assets/covers/gift-of-the-magi.svg";
-import theLotteryCover from "@/assets/covers/the-lottery.svg";
-import aRaisinInTheSunCover from "@/assets/covers/a-raisin-in-the-sun.svg";
-import yellowWallpaperCover from "@/assets/covers/yellow-wallpaper.svg";
-import aDollsHouseCover from "@/assets/covers/a-dolls-house.svg";
-import lastLeafCover from "@/assets/covers/last-leaf.svg";
-import deathOfASalesmanCover from "@/assets/covers/death-of-a-salesman.svg";
-import romeoAndJulietCover from "@/assets/covers/romeo-and-juliet.svg";
-import fallbackCover from "@/assets/covers/fallback-cover.svg";
+
+const coverImagePaths = {
+  tellTaleHeart: "/covers/tell-tale-heart.svg",
+  hamlet: "/covers/hamlet.svg",
+  giftOfTheMagi: "/covers/gift-of-the-magi.svg",
+  theLottery: "/covers/the-lottery.svg",
+  aRaisinInTheSun: "/covers/a-raisin-in-the-sun.svg",
+  yellowWallpaper: "/covers/yellow-wallpaper.svg",
+  aDollsHouse: "/covers/a-dolls-house.svg",
+  lastLeaf: "/covers/last-leaf.svg",
+  deathOfASalesman: "/covers/death-of-a-salesman.svg",
+  romeoAndJuliet: "/covers/romeo-and-juliet.svg",
+  fallback: "/covers/fallback-cover.svg",
+} as const;
 
 const features = [
   {
@@ -72,22 +75,67 @@ type TrendingItem = {
   source?: string;
 };
 
-const onlineImageFallback = fallbackCover;
+type OpenLibrarySearchResponse = {
+  docs?: Array<{
+    cover_i?: number;
+  }>;
+};
+
+const fetchOpenLibraryCover = async (title: string, author: string) => {
+  const params = new URLSearchParams({
+    title,
+    author,
+    fields: "cover_i",
+    limit: "1",
+  });
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4500);
+  try {
+    const response = await fetch(`https://openlibrary.org/search.json?${params.toString()}`, {
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as OpenLibrarySearchResponse;
+    const coverId = payload.docs?.[0]?.cover_i;
+    if (typeof coverId !== "number") return null;
+    return `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const coverLookupTargets = [
+  { title: "The Tell-Tale Heart", author: "Edgar Allan Poe" },
+  { title: "Hamlet", author: "William Shakespeare" },
+  { title: "The Gift of the Magi", author: "O. Henry" },
+  { title: "The Lottery", author: "Shirley Jackson" },
+  { title: "A Raisin in the Sun", author: "Lorraine Hansberry" },
+  { title: "The Yellow Wallpaper", author: "Charlotte Perkins Gilman" },
+  { title: "A Doll's House", author: "Henrik Ibsen" },
+  { title: "The Last Leaf", author: "O. Henry" },
+  { title: "Death of a Salesman", author: "Arthur Miller" },
+  { title: "Romeo and Juliet", author: "William Shakespeare" },
+] as const;
+
+const onlineImageFallback = coverImagePaths.fallback;
 
 const storyGeneratedCovers = [
-  tellTaleHeartCover,
-  giftOfTheMagiCover,
-  theLotteryCover,
-  yellowWallpaperCover,
-  lastLeafCover,
+  coverImagePaths.tellTaleHeart,
+  coverImagePaths.giftOfTheMagi,
+  coverImagePaths.theLottery,
+  coverImagePaths.yellowWallpaper,
+  coverImagePaths.lastLeaf,
 ];
 
 const playscriptGeneratedCovers = [
-  hamletCover,
-  aRaisinInTheSunCover,
-  aDollsHouseCover,
-  deathOfASalesmanCover,
-  romeoAndJulietCover,
+  coverImagePaths.hamlet,
+  coverImagePaths.aRaisinInTheSun,
+  coverImagePaths.aDollsHouse,
+  coverImagePaths.deathOfASalesman,
+  coverImagePaths.romeoAndJuliet,
 ];
 
 const getGeneratedCover = (format: CoverFormat, index: number) => {
@@ -100,19 +148,19 @@ const recommendedTopics = [
     title: "The Tell-Tale Heart",
     format: "Story",
     description: "Edgar Allan Poe's suspense classic with an unreliable narrator and mounting guilt.",
-    imageSrc: tellTaleHeartCover,
+    imageSrc: coverImagePaths.tellTaleHeart,
   },
   {
     title: "Hamlet",
     format: "Playscript",
     description: "Shakespeare's iconic tragedy of power, grief, and moral uncertainty.",
-    imageSrc: hamletCover,
+    imageSrc: coverImagePaths.hamlet,
   },
   {
     title: "The Gift of the Magi",
     format: "Story",
     description: "O. Henry's timeless short story of sacrifice, love, and irony.",
-    imageSrc: giftOfTheMagiCover,
+    imageSrc: coverImagePaths.giftOfTheMagi,
   },
 ];
 
@@ -122,28 +170,28 @@ const fallbackTrendingNow: TrendingItem[] = [
     category: "Classic Story",
     format: "Story",
     reads: "By Shirley Jackson",
-    imageSrc: theLotteryCover,
+    imageSrc: coverImagePaths.theLottery,
   },
   {
     title: "A Raisin in the Sun",
     category: "Classic Playscript",
     format: "Playscript",
     reads: "By Lorraine Hansberry",
-    imageSrc: aRaisinInTheSunCover,
+    imageSrc: coverImagePaths.aRaisinInTheSun,
   },
   {
     title: "The Yellow Wallpaper",
     category: "Classic Story",
     format: "Story",
     reads: "By Charlotte Perkins Gilman",
-    imageSrc: yellowWallpaperCover,
+    imageSrc: coverImagePaths.yellowWallpaper,
   },
   {
     title: "A Doll's House",
     category: "Classic Playscript",
     format: "Playscript",
     reads: "By Henrik Ibsen",
-    imageSrc: aDollsHouseCover,
+    imageSrc: coverImagePaths.aDollsHouse,
   },
 ];
 
@@ -152,19 +200,19 @@ const editorsPick = [
     title: "The Last Leaf",
     category: "Story · O. Henry",
     blurb: "A beloved short story known for emotional restraint, precise pacing, and a memorable ending.",
-    imageSrc: lastLeafCover,
+    imageSrc: coverImagePaths.lastLeaf,
   },
   {
     title: "Death of a Salesman",
     category: "Playscript · Arthur Miller",
     blurb: "A modern theater landmark blending realism, memory, and sharp character conflict.",
-    imageSrc: deathOfASalesmanCover,
+    imageSrc: coverImagePaths.deathOfASalesman,
   },
   {
     title: "Romeo and Juliet",
     category: "Playscript · William Shakespeare",
     blurb: "A canonical tragedy with enduring themes of love, conflict, and fate.",
-    imageSrc: romeoAndJulietCover,
+    imageSrc: coverImagePaths.romeoAndJuliet,
   },
 ];
 
@@ -172,6 +220,41 @@ const LandingPage = () => {
   const [trendingItems, setTrendingItems] = useState<TrendingItem[]>(fallbackTrendingNow);
   const [trendingState, setTrendingState] = useState<"loading" | "live" | "fallback">("loading");
   const [trendingUpdatedAt, setTrendingUpdatedAt] = useState<string | null>(null);
+  const [liveCoversByTitle, setLiveCoversByTitle] = useState<Record<string, string>>({});
+
+  const getCoverSrc = (title: string, fallbackSrc: string) =>
+    liveCoversByTitle[title] ?? fallbackSrc;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchCuratedCovers = async () => {
+      const results = await Promise.allSettled(
+        coverLookupTargets.map(async (item) => {
+          const coverSrc = await fetchOpenLibraryCover(item.title, item.author);
+          return { title: item.title, coverSrc };
+        })
+      );
+
+      if (cancelled) return;
+
+      const nextCovers: Record<string, string> = {};
+      for (const result of results) {
+        if (result.status !== "fulfilled") continue;
+        if (!result.value.coverSrc) continue;
+        nextCovers[result.value.title] = result.value.coverSrc;
+      }
+
+      if (Object.keys(nextCovers).length > 0) {
+        setLiveCoversByTitle(nextCovers);
+      }
+    };
+
+    void fetchCuratedCovers();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -346,7 +429,7 @@ const LandingPage = () => {
                 >
                   <div className="relative aspect-[3/4] overflow-hidden">
                     <img
-                      src={story.imageSrc}
+                      src={getCoverSrc(story.title, story.imageSrc)}
                       alt={story.title}
                       loading="lazy"
                       className="w-full h-full object-cover"
@@ -387,7 +470,7 @@ const LandingPage = () => {
                 ? `Live from Reddit · Updated ${new Date(trendingUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                 : trendingState === "loading"
                   ? "Loading live trends..."
-                  : "Showing curated picks while live trends are unavailable."}
+                  : ""}
             </p>
           </motion.div>
 
@@ -406,7 +489,7 @@ const LandingPage = () => {
               >
                 <div className="relative aspect-[3/4] overflow-hidden">
                   <img
-                    src={story.imageSrc}
+                    src={getCoverSrc(story.title, story.imageSrc)}
                     alt={story.title}
                     loading="lazy"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -457,7 +540,7 @@ const LandingPage = () => {
               >
                 <div className="aspect-[16/10] overflow-hidden">
                   <img
-                    src={story.imageSrc}
+                    src={getCoverSrc(story.title, story.imageSrc)}
                     alt={story.title}
                     loading="lazy"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -542,7 +625,7 @@ const LandingPage = () => {
               >
                 <div className="aspect-[16/10] overflow-hidden">
                   <img
-                    src={topic.imageSrc}
+                    src={getCoverSrc(topic.title, topic.imageSrc)}
                     alt={topic.title}
                     loading="lazy"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"

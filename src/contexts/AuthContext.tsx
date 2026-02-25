@@ -34,10 +34,23 @@ const isOfflineError = (err: unknown) => {
 const getAuthErrorMessage = (err: unknown, fallback: string) => {
   const code = getErrorCode(err);
   switch (code) {
+    case "invalid-credential":
+    case "invalid-login-credentials":
+    case "wrong-password":
+    case "user-not-found":
+      return "Invalid email or password. Please check your credentials and try again.";
+    case "invalid-email":
+      return "Invalid email address format.";
+    case "user-disabled":
+      return "This account has been disabled. Contact support if this is unexpected.";
+    case "email-already-in-use":
+      return "That email is already registered. Try signing in instead.";
+    case "weak-password":
+      return "Password is too weak. Use at least 6 characters.";
     case "unauthorized-domain":
       return "This domain is not authorized for Google sign-in. Add it in Firebase Authentication > Settings > Authorized domains.";
     case "operation-not-allowed":
-      return "Google sign-in is not enabled in Firebase Authentication.";
+      return "This sign-in method is not enabled in Firebase Authentication.";
     case "popup-blocked":
       return "Google sign-in popup was blocked by your browser.";
     case "popup-closed-by-user":
@@ -204,10 +217,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         console.error("Background profile sync failed after sign up:", err);
       });
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to sign up";
+      const errorMessage = getAuthErrorMessage(err, "Failed to sign up");
       setError(errorMessage);
-      throw err;
+      throw new Error(errorMessage);
     }
   };
 
@@ -226,10 +238,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         console.error("Background profile sync failed after sign in:", err);
       });
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to sign in";
+      const errorMessage = getAuthErrorMessage(err, "Failed to sign in");
       setError(errorMessage);
-      throw err;
+      throw new Error(errorMessage);
     }
   };
 
