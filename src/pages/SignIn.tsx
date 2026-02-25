@@ -8,9 +8,18 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/use-auth";
 
+const GoogleIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+    <path
+      fill="#EA4335"
+      d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.9-5.5 3.9-3.3 0-6-2.8-6-6.2s2.7-6.2 6-6.2c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.7 3 14.6 2 12 2 6.9 2 2.8 6.2 2.8 11.4S6.9 20.8 12 20.8c6.9 0 9.1-4.9 9.1-7.4 0-.5 0-.9-.1-1.2H12z"
+    />
+  </svg>
+);
+
 const SignIn = () => {
   const navigate = useNavigate();
-  const { signIn, loading, error: authError } = useAuth();
+  const { signIn, signInWithGoogle, loading, error: authError } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string>("");
@@ -39,6 +48,23 @@ const SignIn = () => {
         err instanceof Error
           ? err.message
           : "Failed to sign in. Please check your credentials."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError("");
+    try {
+      setIsLoading(true);
+      await signInWithGoogle();
+      navigate("/dashboard");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to sign in with Google."
       );
     } finally {
       setIsLoading(false);
@@ -106,6 +132,25 @@ const SignIn = () => {
                 disabled={isLoading || loading}
               >
                 {isLoading || loading ? "Signing In..." : "Sign In"}
+              </Button>
+              <div className="relative w-full">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground tracking-wide">or</span>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                size="lg"
+                onClick={handleGoogleSignIn}
+                disabled={isLoading || loading}
+              >
+                <GoogleIcon />
+                <span className="ml-2">Continue with Google</span>
               </Button>
               <p className="text-sm text-muted-foreground text-center">
                 Don't have an account?{" "}

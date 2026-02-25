@@ -20,7 +20,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/hooks/use-auth";
 import {
   type Document,
@@ -129,17 +128,6 @@ const Dashboard = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex items-center gap-3 text-muted-foreground font-body">
-          <Spinner />
-          <span>Loading your workspace...</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <nav className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -199,6 +187,11 @@ const Dashboard = () => {
           <p className="font-body text-muted-foreground max-w-2xl">
             Manage your drafts, track writing momentum, and continue exactly where you left off.
           </p>
+          {loading && (
+            <p className="font-body text-sm text-muted-foreground mt-3">
+              Syncing your workspace...
+            </p>
+          )}
           <div className="mt-6 flex flex-wrap gap-3">
             <Button onClick={() => handleCreate("story")} disabled={creatingType !== null}>
               <Plus className="h-4 w-4 mr-1" /> New Story
@@ -325,7 +318,25 @@ const Dashboard = () => {
               </div>
             </CardHeader>
             <CardContent>
-              {filtered.length > 0 ? (
+              {loading && filtered.length === 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[0, 1, 2, 3].map((item) => (
+                    <div
+                      key={item}
+                      className="rounded-xl border border-border p-5 bg-background animate-pulse"
+                    >
+                      <div className="h-3.5 w-24 bg-muted rounded mb-4" />
+                      <div className="h-5 w-3/4 bg-muted rounded mb-3" />
+                      <div className="space-y-2 mb-4">
+                        <div className="h-3 w-full bg-muted rounded" />
+                        <div className="h-3 w-11/12 bg-muted rounded" />
+                        <div className="h-3 w-2/3 bg-muted rounded" />
+                      </div>
+                      <div className="h-3 w-1/2 bg-muted rounded" />
+                    </div>
+                  ))}
+                </div>
+              ) : filtered.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {filtered.map((work, i) => (
                     <motion.div

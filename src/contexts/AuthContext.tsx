@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from "react";
+import type { FirebaseError } from "firebase/app";
 import {
   User,
+  GoogleAuthProvider,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -13,6 +16,40 @@ import type { UserProfile, AuthContextType } from "./types";
 
 export type { UserProfile, AuthContextType };
 export { AuthContext };
+
+const getErrorCode = (err: unknown) => {
+  if (typeof err !== "object" || err === null) return null;
+  const maybeError = err as Partial<FirebaseError>;
+  if (typeof maybeError.code !== "string") return null;
+  return maybeError.code.replace(/^[^/]+\//, "");
+};
+
+const isOfflineError = (err: unknown) => {
+  const code = getErrorCode(err);
+  if (code === "unavailable") return true;
+  if (err instanceof Error && /offline/i.test(err.message)) return true;
+  return false;
+};
+
+const getAuthErrorMessage = (err: unknown, fallback: string) => {
+  const code = getErrorCode(err);
+  switch (code) {
+    case "unauthorized-domain":
+      return "This domain is not authorized for Google sign-in. Add it in Firebase Authentication > Settings > Authorized domains.";
+    case "operation-not-allowed":
+      return "Google sign-in is not enabled in Firebase Authentication.";
+    case "popup-blocked":
+      return "Google sign-in popup was blocked by your browser.";
+    case "popup-closed-by-user":
+      return "Google sign-in popup was closed before completion.";
+    case "network-request-failed":
+      return "Network error during sign in. Please try again.";
+    case "too-many-requests":
+      return "Too many sign-in attempts. Please try again in a few minutes.";
+    default:
+      return err instanceof Error ? err.message : fallback;
+  }
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -27,6 +64,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     if (currentUser.email?.includes("@")) return currentUser.email.split("@")[0];
     return "Writer";
   };
+
+  const buildFallbackProfile = (
+    currentUser: User,
+    preferredName?: string,
+    options?: { touchLastSignIn?: boolean }
+  ): UserProfile => ({
+    uid: currentUser.uid,
+    email: currentUser.email ?? "",
+    name: preferredName?.trim() || getDefaultName(currentUser),
+    createdAt: new Date().toISOString(),
+    lastSignInAt: options?.touchLastSignIn ? new Date().toISOString() : undefined,
+    photoURL: currentUser.photoURL ?? null,
+  });
 
   const getAuthInstance = () => {
     if (!auth) {
@@ -51,10 +101,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const touchLastSignIn = options?.touchLastSignIn ?? false;
       const firestore = getDbInstance();
       const docRef = doc(firestore, "users", currentUser.uid);
-      const docSnap = await getDoc(docRef);
-      const existingProfile = docSnap.exists()
-        ? (docSnap.data() as Partial<UserProfile>)
-        : null;
+      let existingProfile: Partial<UserProfile> | null = null;
+
+      try {
+        const docSnap = await getDoc(docRef);
+        existingProfile = docSnap.exists()
+          ? (docSnap.data() as Partial<UserProfile>)
+          : null;
+      } catch (err) {
+        if (!isOfflineError(err)) throw err;
+      }
 
       const profile: UserProfile = {
         uid: currentUser.uid,
@@ -68,7 +124,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       };
 
       setUserProfile(profile);
-      await setDoc(docRef, profile, { merge: true });
+      try {
+        await setDoc(docRef, profile, { merge: true });
+      } catch (err) {
+        if (!isOfflineError(err)) throw err;
+        console.warn("Skipping profile sync while offline.");
+      }
+
       return profile;
     } catch (err) {
       console.error("Error upserting user profile:", err);
@@ -77,6 +139,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const fetchUserProfile = async (currentUser: User) => {
+    const fallbackProfile = buildFallbackProfile(currentUser);
+
     try {
       const firestore = getDbInstance();
       const docRef = doc(firestore, "users", currentUser.uid);
@@ -88,6 +152,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       await upsertUserProfile(currentUser);
     } catch (err) {
+      if (isOfflineError(err)) {
+        setUserProfile((previous) => previous ?? fallbackProfile);
+        return;
+      }
       console.error("Failed to fetch user profile:", err);
     }
   };
@@ -128,7 +196,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setError(null);
       const authInstance = getAuthInstance();
       const result = await createUserWithEmailAndPassword(authInstance, email, password);
-      await upsertUserProfile(result.user, name, { touchLastSignIn: true });
+      setUser(result.user);
+      setUserProfile(buildFallbackProfile(result.user, name, { touchLastSignIn: true }));
+
+      // Keep auth flows fast; sync profile without blocking navigation.
+      void upsertUserProfile(result.user, name, { touchLastSignIn: true }).catch((err) => {
+        console.error("Background profile sync failed after sign up:", err);
+      });
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to sign up";
@@ -142,13 +216,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setError(null);
       const authInstance = getAuthInstance();
       const result = await signInWithEmailAndPassword(authInstance, email, password);
-      // Ensure user profile exists and refresh login timestamp.
-      await upsertUserProfile(result.user, undefined, { touchLastSignIn: true });
+      setUser(result.user);
+      setUserProfile((previous) =>
+        previous ?? buildFallbackProfile(result.user, undefined, { touchLastSignIn: true })
+      );
+
+      // Ensure profile exists and refresh login timestamp in background.
+      void upsertUserProfile(result.user, undefined, { touchLastSignIn: true }).catch((err) => {
+        console.error("Background profile sync failed after sign in:", err);
+      });
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to sign in";
       setError(errorMessage);
       throw err;
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    try {
+      setError(null);
+      const authInstance = getAuthInstance();
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(authInstance, provider);
+
+      setUser(result.user);
+      setUserProfile((previous) =>
+        previous ?? buildFallbackProfile(result.user, result.user.displayName ?? undefined, { touchLastSignIn: true })
+      );
+
+      void upsertUserProfile(
+        result.user,
+        result.user.displayName ?? undefined,
+        { touchLastSignIn: true }
+      ).catch((err) => {
+        console.error("Background profile sync failed after Google sign in:", err);
+      });
+    } catch (err) {
+      const errorMessage = getAuthErrorMessage(err, "Failed to sign in with Google");
+      setError(errorMessage);
+      throw new Error(errorMessage);
     }
   };
 
@@ -173,6 +281,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     loading,
     signUp,
     signIn,
+    signInWithGoogle,
     logOut,
     error,
   };

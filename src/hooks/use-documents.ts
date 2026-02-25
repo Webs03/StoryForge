@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import type { FirebaseError } from "firebase/app";
 import {
   collection,
   addDoc,
@@ -6,6 +7,9 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  getDocsFromCache,
+  type QuerySnapshot,
+  type DocumentData,
   query,
   where,
   Timestamp,
@@ -47,6 +51,54 @@ const parseStatus = (value: unknown): DocumentStatus => {
   return "Draft";
 };
 
+const getErrorCode = (err: unknown) => {
+  if (typeof err !== "object" || err === null) return null;
+  const maybeError = err as Partial<FirebaseError>;
+  if (typeof maybeError.code !== "string") return null;
+  return maybeError.code.replace(/^firestore\//, "");
+};
+
+const isOfflineError = (err: unknown) => {
+  const code = getErrorCode(err);
+  if (code === "unavailable") return true;
+  if (err instanceof Error && /offline/i.test(err.message)) return true;
+  return false;
+};
+
+const normalizeErrorMessage = (err: unknown, fallback: string) => {
+  if (isOfflineError(err)) {
+    return "You are offline. Reconnect to sync your latest documents.";
+  }
+  const code = getErrorCode(err);
+  if (code === "permission-denied") {
+    return "Permission denied while accessing documents. Check Firestore rules.";
+  }
+  return err instanceof Error ? err.message : fallback;
+};
+
+const mapSnapshotToDocuments = (
+  snapshot: QuerySnapshot<DocumentData>,
+  fallbackOwner: string
+) => {
+  const docs: Document[] = [];
+  snapshot.forEach((item) => {
+    const data = item.data();
+    docs.push({
+      id: item.id,
+      title: typeof data.title === "string" ? data.title : "Untitled",
+      content: typeof data.content === "string" ? data.content : "",
+      owner: typeof data.owner === "string" ? data.owner : fallbackOwner,
+      type: parseType(data.type),
+      status: parseStatus(data.status),
+      genre: typeof data.genre === "string" ? data.genre : "Uncategorized",
+      createdAt: parseDate(data.createdAt),
+      updatedAt: parseDate(data.updatedAt),
+    });
+  });
+  docs.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  return docs;
+};
+
 export const useDocuments = () => {
   const { user } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -76,34 +128,30 @@ export const useDocuments = () => {
     }
 
     const fetchDocuments = async () => {
+      const firestore = getDbInstance();
+      const documentsQuery = query(
+        collection(firestore, "documents"),
+        where("owner", "==", user.uid)
+      );
+
       try {
         setLoading(true);
-        const firestore = getDbInstance();
-        const q = query(
-          collection(firestore, "documents"),
-          where("owner", "==", user.uid)
-        );
-        const querySnapshot = await getDocs(q);
-        const docs: Document[] = [];
-        querySnapshot.forEach((item) => {
-          const data = item.data();
-          docs.push({
-            id: item.id,
-            title: typeof data.title === "string" ? data.title : "Untitled",
-            content: typeof data.content === "string" ? data.content : "",
-            owner: typeof data.owner === "string" ? data.owner : user.uid,
-            type: parseType(data.type),
-            status: parseStatus(data.status),
-            genre: typeof data.genre === "string" ? data.genre : "Uncategorized",
-            createdAt: parseDate(data.createdAt),
-            updatedAt: parseDate(data.updatedAt),
-          });
-        });
-        docs.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-        setDocuments(docs);
+        const querySnapshot = await getDocs(documentsQuery);
+        setDocuments(mapSnapshotToDocuments(querySnapshot, user.uid));
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to fetch documents");
+        if (isOfflineError(err)) {
+          try {
+            const cachedSnapshot = await getDocsFromCache(documentsQuery);
+            setDocuments(mapSnapshotToDocuments(cachedSnapshot, user.uid));
+            setError("You are offline. Showing cached documents.");
+          } catch {
+            setDocuments([]);
+            setError("You are offline and no cached documents are available yet.");
+          }
+        } else {
+          setError(normalizeErrorMessage(err, "Failed to fetch documents"));
+        }
       } finally {
         setLoading(false);
       }
@@ -156,7 +204,7 @@ export const useDocuments = () => {
 
       return docRef.id;
     } catch (err) {
-      throw err instanceof Error ? err : new Error("Failed to create document");
+      throw new Error(normalizeErrorMessage(err, "Failed to create document"));
     }
   };
 
@@ -183,7 +231,7 @@ export const useDocuments = () => {
         return updated;
       });
     } catch (err) {
-      throw err instanceof Error ? err : new Error("Failed to update document");
+      throw new Error(normalizeErrorMessage(err, "Failed to update document"));
     }
   };
 
@@ -196,7 +244,7 @@ export const useDocuments = () => {
       await deleteDoc(doc(firestore, "documents", docId));
       setDocuments((previous) => previous.filter((item) => item.id !== docId));
     } catch (err) {
-      throw err instanceof Error ? err : new Error("Failed to delete document");
+      throw new Error(normalizeErrorMessage(err, "Failed to delete document"));
     }
   };
 
