@@ -107,19 +107,6 @@ const fetchOpenLibraryCover = async (title: string, author: string) => {
   }
 };
 
-const coverLookupTargets = [
-  { title: "The Tell-Tale Heart", author: "Edgar Allan Poe" },
-  { title: "Hamlet", author: "William Shakespeare" },
-  { title: "The Gift of the Magi", author: "O. Henry" },
-  { title: "The Lottery", author: "Shirley Jackson" },
-  { title: "A Raisin in the Sun", author: "Lorraine Hansberry" },
-  { title: "The Yellow Wallpaper", author: "Charlotte Perkins Gilman" },
-  { title: "A Doll's House", author: "Henrik Ibsen" },
-  { title: "The Last Leaf", author: "O. Henry" },
-  { title: "Death of a Salesman", author: "Arthur Miller" },
-  { title: "Romeo and Juliet", author: "William Shakespeare" },
-] as const;
-
 const onlineImageFallback = coverImagePaths.fallback;
 
 const storyGeneratedCovers = [
@@ -143,84 +130,223 @@ const getGeneratedCover = (format: CoverFormat, index: number) => {
   return coverSet[index % coverSet.length] ?? onlineImageFallback;
 };
 
-const recommendedTopics = [
+const buildOpenLibrarySearchHref = (title: string, author: string) =>
+  `https://openlibrary.org/search?${new URLSearchParams({
+    title,
+    author,
+  }).toString()}`;
+
+type FamiliarWork = {
+  title: string;
+  author: string;
+  format: CoverFormat;
+  topicDescription: string;
+  editorBlurb: string;
+  searchTitle?: string;
+};
+
+const familiarWorks: FamiliarWork[] = [
   {
-    title: "The Tell-Tale Heart",
+    title: "The Strange Case of Dr. Jekyll and Mr. Hyde",
+    author: "Robert Louis Stevenson",
     format: "Story",
-    description: "Edgar Allan Poe's suspense classic with an unreliable narrator and mounting guilt.",
-    imageSrc: coverImagePaths.tellTaleHeart,
+    topicDescription: "A gothic classic on identity, secrecy, and the dual nature of human character.",
+    editorBlurb: "Stevenson's novella remains a key reference for psychological conflict in fiction.",
   },
   {
-    title: "Hamlet",
+    title: "Macbeth",
+    author: "William Shakespeare",
     format: "Playscript",
-    description: "Shakespeare's iconic tragedy of power, grief, and moral uncertainty.",
-    imageSrc: coverImagePaths.hamlet,
+    topicDescription: "A powerful tragedy about ambition, guilt, and the cost of unchecked desire.",
+    editorBlurb: "A cornerstone of dramatic structure with memorable conflict and language.",
   },
   {
-    title: "The Gift of the Magi",
+    title: "The Crucible",
+    author: "Arthur Miller",
+    format: "Playscript",
+    topicDescription: "A tense play that explores fear, accusation, and moral courage under pressure.",
+    editorBlurb: "Miller's script remains one of the strongest examples of social drama on stage.",
+  },
+  {
+    title: "Romeo & Juliet",
+    author: "William Shakespeare",
+    format: "Playscript",
+    topicDescription: "A timeless tragedy of young love, family conflict, and fate.",
+    editorBlurb: "A defining romantic tragedy with enduring influence in theater and literature.",
+    searchTitle: "Romeo and Juliet",
+  },
+  {
+    title: "If Anything Happens I Love You",
+    author: "Will McCormack and Michael Govier",
+    format: "Playscript",
+    topicDescription: "A short-form dramatic narrative known for emotional pacing and visual storytelling.",
+    editorBlurb: "A modern short-film script example with concise structure and emotional impact.",
+  },
+  {
+    title: "Frankenstein",
+    author: "Mary Shelley",
     format: "Story",
-    description: "O. Henry's timeless short story of sacrifice, love, and irony.",
-    imageSrc: coverImagePaths.giftOfTheMagi,
+    topicDescription: "A foundational novel of science fiction, ethics, and human responsibility.",
+    editorBlurb: "Shelley's novel blends horror and philosophy with lasting literary relevance.",
+  },
+  {
+    title: "Beowulf",
+    author: "Anonymous (Old English epic)",
+    format: "Story",
+    topicDescription: "An epic poem of heroism, legacy, and mortality across generations.",
+    editorBlurb: "A classic epic that still informs heroic storytelling and mythic narrative arcs.",
+  },
+  {
+    title: "Emma",
+    author: "Jane Austen",
+    format: "Story",
+    topicDescription: "A sharp social novel about self-awareness, class, and relationships.",
+    editorBlurb: "Austen's character-driven prose is a model for subtle irony and voice.",
+  },
+  {
+    title: "Pride & Prejudice",
+    author: "Jane Austen",
+    format: "Story",
+    topicDescription: "A beloved novel of wit, social expectation, and personal growth.",
+    editorBlurb: "Austen's dialogue and character arcs make this a benchmark for classic romance.",
+    searchTitle: "Pride and Prejudice",
+  },
+  {
+    title: "I Know Why the Caged Bird Sings",
+    author: "Maya Angelou",
+    format: "Story",
+    topicDescription: "A powerful autobiographical work on resilience, identity, and voice.",
+    editorBlurb: "Angelou's memoir is admired for emotional honesty and lyrical narrative strength.",
+  },
+  {
+    title: "Sense & Sensibility",
+    author: "Jane Austen",
+    format: "Story",
+    topicDescription: "A classic exploration of reason, emotion, and family expectations.",
+    editorBlurb: "Austen balances social commentary and character growth with precise prose.",
+    searchTitle: "Sense and Sensibility",
+  },
+  {
+    title: "Paradise Lost",
+    author: "John Milton",
+    format: "Story",
+    topicDescription: "An epic poem of rebellion, free will, and moral consequence.",
+    editorBlurb: "Milton's scope and poetic ambition make it a landmark in English literature.",
+  },
+  {
+    title: "Wuthering Heights",
+    author: "Emily Bronte",
+    format: "Story",
+    topicDescription: "A dark romantic novel centered on obsession, memory, and revenge.",
+    editorBlurb: "Bronte's intense tone and layered narration keep this work continually discussed.",
+  },
+  {
+    title: "Wait Till Helen Comes",
+    author: "Mary Downing Hahn",
+    format: "Story",
+    topicDescription: "A well-known ghost story blending family tension and supernatural mystery.",
+    editorBlurb: "A strong middle-grade horror example with accessible pacing and atmosphere.",
   },
 ];
 
-const fallbackTrendingNow: TrendingItem[] = [
+const topicsForYouWorks: FamiliarWork[] = [
+  familiarWorks[0], // Dr. Jekyll and Mr. Hyde
+  familiarWorks[5], // Frankenstein
+  familiarWorks[8], // Pride & Prejudice
+  familiarWorks[9], // I Know Why the Caged Bird Sings
+  familiarWorks[1], // Macbeth
+  familiarWorks[2], // The Crucible
+];
+
+const editorsPickWorks: FamiliarWork[] = [
   {
-    title: "The Lottery",
-    category: "Classic Story",
-    format: "Story",
-    reads: "By Shirley Jackson",
-    imageSrc: coverImagePaths.theLottery,
-  },
-  {
-    title: "A Raisin in the Sun",
-    category: "Classic Playscript",
+    title: "Othello",
+    author: "William Shakespeare",
     format: "Playscript",
-    reads: "By Lorraine Hansberry",
-    imageSrc: coverImagePaths.aRaisinInTheSun,
+    topicDescription: "A classic tragedy of trust, jealousy, and manipulation.",
+    editorBlurb: "Shakespeare's dramatic tension and character psychology remain stage essentials.",
   },
   {
-    title: "The Yellow Wallpaper",
-    category: "Classic Story",
-    format: "Story",
-    reads: "By Charlotte Perkins Gilman",
-    imageSrc: coverImagePaths.yellowWallpaper,
-  },
-  {
-    title: "A Doll's House",
-    category: "Classic Playscript",
+    title: "King Lear",
+    author: "William Shakespeare",
     format: "Playscript",
-    reads: "By Henrik Ibsen",
-    imageSrc: coverImagePaths.aDollsHouse,
+    topicDescription: "A major tragedy on power, family loyalty, and human frailty.",
+    editorBlurb: "A masterclass in tragic structure, emotional scale, and dramatic language.",
+  },
+  {
+    title: "All My Sons",
+    author: "Arthur Miller",
+    format: "Playscript",
+    topicDescription: "A post-war family drama about responsibility, denial, and consequence.",
+    editorBlurb: "Miller's tightly built script is an excellent reference for modern realistic theater.",
+  },
+  {
+    title: "Persuasion",
+    author: "Jane Austen",
+    format: "Story",
+    topicDescription: "A mature Austen novel centered on regret, second chances, and social pressure.",
+    editorBlurb: "Austen's late style offers quiet emotional depth and precise character movement.",
+  },
+  {
+    title: "Treasure Island",
+    author: "Robert Louis Stevenson",
+    format: "Story",
+    topicDescription: "A foundational adventure novel known for momentum, atmosphere, and voice.",
+    editorBlurb: "Stevenson's pacing and scene-building make this a lasting adventure benchmark.",
+  },
+  {
+    title: "Northanger Abbey",
+    author: "Jane Austen",
+    format: "Story",
+    topicDescription: "A witty social satire that playfully critiques gothic fiction conventions.",
+    editorBlurb: "Austen blends parody and character growth with clean, readable prose craft.",
   },
 ];
 
-const editorsPick = [
-  {
-    title: "The Last Leaf",
-    category: "Story · O. Henry",
-    blurb: "A beloved short story known for emotional restraint, precise pacing, and a memorable ending.",
-    imageSrc: coverImagePaths.lastLeaf,
-  },
-  {
-    title: "Death of a Salesman",
-    category: "Playscript · Arthur Miller",
-    blurb: "A modern theater landmark blending realism, memory, and sharp character conflict.",
-    imageSrc: coverImagePaths.deathOfASalesman,
-  },
-  {
-    title: "Romeo and Juliet",
-    category: "Playscript · William Shakespeare",
-    blurb: "A canonical tragedy with enduring themes of love, conflict, and fate.",
-    imageSrc: coverImagePaths.romeoAndJuliet,
-  },
-];
+const coverLookupTargets = Array.from(
+  new Map(
+    [...familiarWorks, ...topicsForYouWorks, ...editorsPickWorks].map((work) => [
+      work.title,
+      {
+        title: work.title,
+        author: work.author,
+        searchTitle: work.searchTitle ?? work.title,
+      },
+    ])
+  ).values()
+);
+
+const recommendedTopics = topicsForYouWorks.slice(0, 6).map((work, index) => ({
+  title: work.title,
+  format: work.format,
+  description: work.topicDescription,
+  imageSrc: getGeneratedCover(work.format, index),
+}));
+
+const fallbackTrendingNow: TrendingItem[] = familiarWorks.map((work, index) => ({
+  title: work.title,
+  category: work.format === "Playscript" ? "Classic Playscript" : "Classic Story",
+  format: work.format,
+  reads: `By ${work.author}`,
+  imageSrc: getGeneratedCover(work.format, index),
+  href: buildOpenLibrarySearchHref(work.searchTitle ?? work.title, work.author),
+  source: "StoryForge",
+}));
+
+const editorsPick = editorsPickWorks.slice(0, 6).map((work, index) => ({
+  title: work.title,
+  category: `${work.format} · ${work.author}`,
+  blurb: work.editorBlurb,
+  imageSrc: getGeneratedCover(work.format, index + 1),
+}));
 
 const LandingPage = () => {
   const [trendingItems, setTrendingItems] = useState<TrendingItem[]>(fallbackTrendingNow);
   const [trendingState, setTrendingState] = useState<"loading" | "live" | "fallback">("loading");
   const [trendingUpdatedAt, setTrendingUpdatedAt] = useState<string | null>(null);
   const [liveCoversByTitle, setLiveCoversByTitle] = useState<Record<string, string>>({});
+  const readerShelfItems = trendingItems.slice(0, 4);
+  const trendingNowItems = trendingItems.slice(0, 8);
 
   const getCoverSrc = (title: string, fallbackSrc: string) =>
     liveCoversByTitle[title] ?? fallbackSrc;
@@ -231,7 +357,7 @@ const LandingPage = () => {
     const fetchCuratedCovers = async () => {
       const results = await Promise.allSettled(
         coverLookupTargets.map(async (item) => {
-          const coverSrc = await fetchOpenLibraryCover(item.title, item.author);
+          const coverSrc = await fetchOpenLibraryCover(item.searchTitle, item.author);
           return { title: item.title, coverSrc };
         })
       );
@@ -286,14 +412,11 @@ const LandingPage = () => {
         const liveItems: TrendingItem[] = collected
           .map(({ source, post }, index) => {
             const title = typeof post.title === "string" ? post.title : "";
-            const subreddit =
-              typeof post.subreddit === "string" ? post.subreddit : "writing";
-            const permalink =
-              typeof post.permalink === "string" ? post.permalink : "";
+            const subreddit = typeof post.subreddit === "string" ? post.subreddit : "writing";
+            const permalink = typeof post.permalink === "string" ? post.permalink : "";
             const ups = typeof post.ups === "number" ? post.ups : 0;
             const thumbnail =
-              typeof post.thumbnail === "string" &&
-              /^https?:\/\//.test(post.thumbnail)
+              typeof post.thumbnail === "string" && /^https?:\/\//.test(post.thumbnail)
                 ? post.thumbnail
                 : getGeneratedCover(source.format, index);
             const isPinned = Boolean(post.stickied);
@@ -314,7 +437,7 @@ const LandingPage = () => {
           })
           .filter((item): item is TrendingItem => item !== null)
           .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-          .slice(0, 4);
+          .slice(0, 8);
 
         if (cancelled) return;
 
@@ -419,10 +542,16 @@ const LandingPage = () => {
               <p className="font-body text-xs uppercase tracking-[0.2em] text-primary font-semibold">
                 Reader Shelf
               </p>
-              <span className="text-xs text-muted-foreground font-body">Updated Live</span>
+              <span className="text-xs text-muted-foreground font-body">
+                {trendingState === "live"
+                  ? "Updated Live"
+                  : trendingState === "loading"
+                    ? "Syncing..."
+                    : "Curated Picks"}
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {trendingItems.map((story) => (
+              {readerShelfItems.map((story) => (
                 <article
                   key={`${story.title}-shelf`}
                   className="rounded-xl overflow-hidden border border-border bg-background shadow-sm"
@@ -475,7 +604,7 @@ const LandingPage = () => {
           </motion.div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-14">
-            {trendingItems.map((story, i) => (
+            {trendingNowItems.map((story, i) => (
               <motion.a
                 key={story.title}
                 initial={{ opacity: 0, y: 20 }}
