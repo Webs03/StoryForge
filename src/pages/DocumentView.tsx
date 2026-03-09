@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -22,9 +22,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/sonner";
 import { useDocuments, type DocumentType } from "@/hooks/use-documents";
+import { downloadDocument, type DocumentExportFormat } from "@/lib/document-export";
 
 const formatRelativeTime = (value: Date) => {
   const diff = Date.now() - value.getTime();
@@ -37,6 +45,15 @@ const formatRelativeTime = (value: Date) => {
   if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
   return value.toLocaleDateString();
 };
+
+const getLineBounds = (value: string, start: number, end: number) => {
+  const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+  const lineEndIndex = value.indexOf("\n", end);
+  const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+  return { lineStart, lineEnd };
+};
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const DocumentView = () => {
   const { id } = useParams();
@@ -64,6 +81,8 @@ const DocumentView = () => {
   const [isResolvingDocument, setIsResolvingDocument] = useState(false);
   const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
   const [resolveAttemptedForId, setResolveAttemptedForId] = useState<string | null>(null);
+  const contentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
 
   const document = useMemo(
     () => documents.find((item) => item.id === id) ?? null,
@@ -126,7 +145,180 @@ const DocumentView = () => {
     ? draftType === "playscript"
     : document?.type === "playscript";
 
+  const applyContentTransform = (
+    transform: (
+      value: string,
+      selectionStart: number,
+      selectionEnd: number
+    ) => { value: string; selectionStart: number; selectionEnd: number }
+  ) => {
+    const textarea = contentTextareaRef.current;
+    if (!textarea) return;
+    const selectionStart = textarea.selectionStart ?? 0;
+    const selectionEnd = textarea.selectionEnd ?? 0;
+
+    setContentDraft((previous) => {
+      const result = transform(previous, selectionStart, selectionEnd);
+      pendingSelectionRef.current = {
+        start: result.selectionStart,
+        end: result.selectionEnd,
+      };
+      return result.value;
+    });
+
+    requestAnimationFrame(() => {
+      const target = contentTextareaRef.current;
+      const nextSelection = pendingSelectionRef.current;
+      if (!target || !nextSelection) return;
+      target.focus();
+      target.setSelectionRange(nextSelection.start, nextSelection.end);
+      pendingSelectionRef.current = null;
+    });
+  };
+
+  const wrapSelection = (prefix: string, suffix: string, placeholder: string) => {
+    applyContentTransform((value, selectionStart, selectionEnd) => {
+      const selected = value.slice(selectionStart, selectionEnd);
+      const insertion = selected || placeholder;
+      const nextValue =
+        value.slice(0, selectionStart) +
+        `${prefix}${insertion}${suffix}` +
+        value.slice(selectionEnd);
+      const nextStart = selectionStart + prefix.length;
+      const nextEnd = nextStart + insertion.length;
+
+      return {
+        value: nextValue,
+        selectionStart: nextStart,
+        selectionEnd: nextEnd,
+      };
+    });
+  };
+
+  const toggleLinePrefix = (prefix: string) => {
+    applyContentTransform((value, selectionStart, selectionEnd) => {
+      const { lineStart, lineEnd } = getLineBounds(value, selectionStart, selectionEnd);
+      const selectedBlock = value.slice(lineStart, lineEnd);
+      const lines = selectedBlock.split("\n");
+      const prefixRegex = new RegExp(`^${escapeRegExp(prefix)}`);
+      const nonEmptyLines = lines.filter((line) => line.trim().length > 0);
+      const removePrefix =
+        nonEmptyLines.length > 0 && nonEmptyLines.every((line) => prefixRegex.test(line));
+
+      const updatedLines = lines.map((line) => {
+        if (line.trim().length === 0) return line;
+        return removePrefix ? line.replace(prefixRegex, "") : `${prefix}${line}`;
+      });
+
+      const updatedBlock = updatedLines.join("\n");
+      const nextValue = value.slice(0, lineStart) + updatedBlock + value.slice(lineEnd);
+
+      return {
+        value: nextValue,
+        selectionStart: lineStart,
+        selectionEnd: lineStart + updatedBlock.length,
+      };
+    });
+  };
+
+  const wrapBlockWithCenter = () => {
+    const startTag = "<div align=\"center\">\n";
+    const endTag = "\n</div>";
+    applyContentTransform((value, selectionStart, selectionEnd) => {
+      const selected = value.slice(selectionStart, selectionEnd);
+      const insertion = selected || "Centered text";
+      const nextValue =
+        value.slice(0, selectionStart) +
+        `${startTag}${insertion}${endTag}` +
+        value.slice(selectionEnd);
+      const nextStart = selectionStart + startTag.length;
+      const nextEnd = nextStart + insertion.length;
+
+      return {
+        value: nextValue,
+        selectionStart: nextStart,
+        selectionEnd: nextEnd,
+      };
+    });
+  };
+
+  const removeCenterWrapper = () => {
+    applyContentTransform((value, selectionStart, selectionEnd) => {
+      const { lineStart, lineEnd } = getLineBounds(value, selectionStart, selectionEnd);
+      const selectedBlock = value.slice(lineStart, lineEnd);
+      const updatedBlock = selectedBlock
+        .replace(/^\s*<div align="center">\s*\n?/i, "")
+        .replace(/\n?\s*<\/div>\s*$/i, "")
+        .replace(/<div align="center">/gi, "")
+        .replace(/<\/div>/gi, "");
+      const nextValue = value.slice(0, lineStart) + updatedBlock + value.slice(lineEnd);
+
+      return {
+        value: nextValue,
+        selectionStart: lineStart,
+        selectionEnd: lineStart + updatedBlock.length,
+      };
+    });
+  };
+
+  const insertHorizontalRule = () => {
+    applyContentTransform((value, selectionStart, selectionEnd) => {
+      const insertion = "\n\n---\n\n";
+      const nextValue = value.slice(0, selectionStart) + insertion + value.slice(selectionEnd);
+      const cursor = selectionStart + insertion.length;
+
+      return {
+        value: nextValue,
+        selectionStart: cursor,
+        selectionEnd: cursor,
+      };
+    });
+  };
+
+  const handleDownload = (format: DocumentExportFormat) => {
+    downloadDocument(titleDraft.trim() || defaultTitle, contentDraft || "", format);
+    toast(`Download started (.${format}).`);
+  };
+
+  const handleShare = async () => {
+    const title = titleDraft.trim() || defaultTitle;
+    const excerpt = contentDraft.trim().slice(0, 280);
+    const shareUrl =
+      isNewDocument || !document
+        ? window.location.href
+        : `${window.location.origin}/document/${document.id}`;
+
+    const sharePayload = {
+      title,
+      text: excerpt ? `${excerpt}${contentDraft.trim().length > 280 ? "..." : ""}` : title,
+      url: shareUrl,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(sharePayload);
+        toast("Shared successfully.");
+        return;
+      }
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(
+          `${title}\n${shareUrl}${excerpt ? `\n\n${sharePayload.text}` : ""}`
+        );
+        toast("Share details copied to clipboard.");
+        return;
+      }
+
+      toast("Sharing is not supported in this browser.");
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      toast("Failed to share document.");
+    }
+  };
+
   const handleSave = async () => {
+    if (!isNewDocument && (!document || !hasUnsavedChanges)) return;
+
     try {
       setSaveError(null);
       setIsSaving(true);
@@ -135,19 +327,43 @@ const DocumentView = () => {
           type: draftType,
           status: "Draft",
         });
+        toast("Draft saved.");
         navigate(`/document/${docId}`, { replace: true });
         return;
       }
 
-      if (!document || !hasUnsavedChanges) return;
-
       await updateDocument(document.id, titleDraft.trim() || "Untitled", contentDraft);
+      toast("Changes saved.");
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save document");
+      toast("Failed to save document.");
     } finally {
       setIsSaving(false);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      void handleSave();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  });
+
+  const formattingActions = [
+    { label: "Bold", icon: Bold, onClick: () => wrapSelection("**", "**", "bold text") },
+    { label: "Italic", icon: Italic, onClick: () => wrapSelection("*", "*", "italic text") },
+    { label: "Horizontal Rule", icon: Minus, onClick: insertHorizontalRule },
+    { label: "Heading 1", icon: Heading1, onClick: () => toggleLinePrefix("# ") },
+    { label: "Heading 2", icon: Heading2, onClick: () => toggleLinePrefix("## ") },
+    { label: "Align Left", icon: AlignLeft, onClick: removeCenterWrapper },
+    { label: "Align Center", icon: AlignCenter, onClick: wrapBlockWithCenter },
+    { label: "Bullet List", icon: List, onClick: () => toggleLinePrefix("- ") },
+  ];
 
   if (!isNewDocument && ((loading && !document) || isResolvingDocument)) {
     return (
@@ -218,8 +434,33 @@ const DocumentView = () => {
               <Save className="h-4 w-4 mr-1" />
               {isSaving ? "Saving..." : "Save"}
             </Button>
-            <Button variant="ghost" size="sm"><Download className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="sm"><Share2 className="h-4 w-4" /></Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" aria-label="Download document">
+                  <Download className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleDownload("docx")}>
+                  DOCX (.docx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDownload("odt")}>
+                  ODT (.odt)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDownload("rtf")}>
+                  RTF (.rtf)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDownload("html")}>
+                  HTML (.html)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDownload("txt")}>
+                  TXT (.txt)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button variant="ghost" size="sm" onClick={() => void handleShare()} aria-label="Share document">
+              <Share2 className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </nav>
@@ -251,9 +492,17 @@ const DocumentView = () => {
 
         {/* Formatting Toolbar */}
         <div className="flex items-center gap-1 p-2 bg-card rounded-lg border border-border mb-6 overflow-x-auto">
-          {[Bold, Italic, Minus, Heading1, Heading2, AlignLeft, AlignCenter, List].map((Icon, i) => (
-            <Button key={i} variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0">
-              <Icon className="h-4 w-4" />
+          {formattingActions.map((action) => (
+            <Button
+              key={action.label}
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 shrink-0"
+              onClick={action.onClick}
+              aria-label={action.label}
+              title={action.label}
+            >
+              <action.icon className="h-4 w-4" />
             </Button>
           ))}
           <Separator orientation="vertical" className="h-5 mx-1" />
@@ -276,6 +525,7 @@ const DocumentView = () => {
             placeholder="Untitled"
           />
           <Textarea
+            ref={contentTextareaRef}
             value={contentDraft}
             onChange={(event) => setContentDraft(event.target.value)}
             placeholder={isPlayscript ? "Start writing your playscript..." : "Start writing your story..."}
