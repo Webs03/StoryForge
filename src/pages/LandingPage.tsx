@@ -846,6 +846,26 @@ const LandingPage = () => {
             <BookOpen className="h-5 w-5 text-primary" />
             <span className="font-display text-lg font-bold text-foreground">StoryForge</span>
           </div>
+          <div className="flex items-center gap-2">
+            <a
+              href="/terms"
+              className="rounded-full border border-border px-3 py-1 text-xs font-body text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors"
+            >
+              Terms
+            </a>
+            <a
+              href="/policy"
+              className="rounded-full border border-border px-3 py-1 text-xs font-body text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors"
+            >
+              Policy
+            </a>
+            <a
+              href="/help"
+              className="rounded-full border border-border px-3 py-1 text-xs font-body text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors"
+            >
+              Help
+            </a>
+          </div>
           <p className="font-body text-sm text-muted-foreground">
             © 2026 StoryForge. Crafted for storytellers.
           </p>
