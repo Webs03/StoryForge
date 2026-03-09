@@ -5,6 +5,7 @@ import {
   type ActionCodeSettings,
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -82,19 +83,100 @@ const getPasswordResetErrorMessage = (err: unknown, fallback: string) => {
       return "Please enter a valid email address.";
     case "missing-email":
       return "Please enter your email address first.";
+    case "user-not-found":
+      return "No account was found for that email address.";
+    case "user-disabled":
+      return "This account has been disabled. Contact support if this is unexpected.";
     case "too-many-requests":
       return "Too many reset attempts. Please wait a few minutes and try again.";
     case "network-request-failed":
       return "Network error while sending reset email. Check your connection and try again.";
     case "operation-not-allowed":
       return "Email/password sign-in is disabled in Firebase Authentication.";
+    case "unauthorized-domain":
+      return "This domain is not authorized in Firebase Authentication settings.";
     case "unauthorized-continue-uri":
       return "Password reset redirect domain is not authorized in Firebase Authentication.";
     case "invalid-continue-uri":
       return "Password reset redirect URL is invalid. Check your app configuration.";
     default:
-      return err instanceof Error ? err.message : fallback;
+      if (err instanceof Error) {
+        return code ? `${err.message} (code: ${code})` : err.message;
+      }
+      return fallback;
   }
+};
+
+const mapRestErrorCodeToAuthCode = (rawCode: string | null) => {
+  if (!rawCode) return null;
+  switch (rawCode) {
+    case "INVALID_EMAIL":
+      return "invalid-email";
+    case "EMAIL_NOT_FOUND":
+      return "user-not-found";
+    case "USER_DISABLED":
+      return "user-disabled";
+    case "TOO_MANY_ATTEMPTS_TRY_LATER":
+    case "RESET_PASSWORD_EXCEED_LIMIT":
+      return "too-many-requests";
+    case "OPERATION_NOT_ALLOWED":
+      return "operation-not-allowed";
+    case "UNAUTHORIZED_DOMAIN":
+      return "unauthorized-domain";
+    case "UNAUTHORIZED_CONTINUE_URI":
+      return "unauthorized-continue-uri";
+    case "INVALID_CONTINUE_URI":
+      return "invalid-continue-uri";
+    case "MISSING_CONTINUE_URI":
+      return "missing-continue-uri";
+    default:
+      return rawCode.toLowerCase().replace(/_/g, "-");
+  }
+};
+
+const sendPasswordResetViaRest = async (email: string, continueUrl?: string) => {
+  const apiKey = import.meta.env.VITE_FIREBASE_API_KEY?.trim();
+  if (!apiKey) {
+    const missingKeyError = new Error("Missing Firebase API key for password reset.");
+    (missingKeyError as Error & { code?: string }).code = "auth/missing-api-key";
+    throw missingKeyError;
+  }
+
+  const payload: Record<string, string> = {
+    requestType: "PASSWORD_RESET",
+    email,
+  };
+  if (continueUrl) {
+    payload.continueUrl = continueUrl;
+  }
+
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (response.ok) return;
+
+  let restErrorCode: string | null = null;
+  try {
+    const data = (await response.json()) as { error?: { message?: string } };
+    if (typeof data.error?.message === "string") {
+      restErrorCode = data.error.message;
+    }
+  } catch {
+    restErrorCode = null;
+  }
+
+  const mappedCode = mapRestErrorCodeToAuthCode(restErrorCode);
+  const restError = new Error("Failed to send password reset email via Firebase REST API.");
+  (restError as Error & { code?: string }).code = mappedCode
+    ? `auth/${mappedCode}`
+    : "auth/password-reset-rest-failed";
+  throw restError;
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
@@ -336,6 +418,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         handleCodeInApp: false,
       };
 
+      const signInMethods = await fetchSignInMethodsForEmail(authInstance, normalizedEmail);
+      if (signInMethods.length > 0 && !signInMethods.includes("password")) {
+        if (signInMethods.includes("google.com")) {
+          throw new Error(
+            "This account uses Google sign-in. Use Continue with Google instead of password reset."
+          );
+        }
+        throw new Error("This account does not use email/password sign-in.");
+      }
+
       try {
         await sendPasswordResetEmail(authInstance, normalizedEmail, actionCodeSettings);
       } catch (firstErr) {
@@ -349,10 +441,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         ) {
           await sendPasswordResetEmail(authInstance, normalizedEmail);
         } else {
-          throw firstErr;
+          await sendPasswordResetViaRest(normalizedEmail, continueUrl);
         }
       }
     } catch (err) {
+      console.error("Password reset failed:", err);
       const errorMessage = getPasswordResetErrorMessage(
         err,
         "Failed to send password reset email"

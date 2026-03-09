@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ForgotPasswordDialog } from "@/components/auth/ForgotPasswordDialog";
 import { useAuth } from "@/hooks/use-auth";
 
 const GoogleIcon = () => (
@@ -36,13 +37,12 @@ const SignIn = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string>("");
-  const [notice, setNotice] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setNotice("");
 
     // Validation
     if (!email.trim()) {
@@ -71,7 +71,6 @@ const SignIn = () => {
 
   const handleGoogleSignIn = async () => {
     setError("");
-    setNotice("");
     try {
       setIsLoading(true);
       const method = await signInWithGoogle();
@@ -89,147 +88,126 @@ const SignIn = () => {
     }
   };
 
-  const handleForgotPassword = async () => {
-    setError("");
-    setNotice("");
-    const normalizedEmail = email.trim();
-    if (!normalizedEmail) {
-      setError("Enter your email address first, then click Forgot password.");
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      await resetPassword(normalizedEmail);
-      setNotice(
-        `If an account exists for ${normalizedEmail}, you'll receive a password reset email shortly. Check spam/promotions if it doesn't appear.`
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to send password reset email."
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const displayError = error || authError;
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <Link to="/" className="flex items-center justify-center gap-2 mb-8">
-          <BookOpen className="h-7 w-7 text-primary" />
-          <span className="font-display text-2xl font-bold text-foreground">StoryForge</span>
-        </Link>
+    <>
+      <ForgotPasswordDialog
+        open={isForgotPasswordOpen}
+        onOpenChange={setIsForgotPasswordOpen}
+        initialEmail={email}
+        onEmailChange={setEmail}
+        onResetPassword={resetPassword}
+      />
 
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle className="font-display text-2xl">Welcome Back</CardTitle>
-            <CardDescription>Sign in to continue writing</CardDescription>
-          </CardHeader>
-          <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
-              {displayError && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{displayError}</AlertDescription>
-                </Alert>
-              )}
-              {notice && (
-                <Alert>
-                  <AlertDescription>{notice}</AlertDescription>
-                </Alert>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={isLoading || loading}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                  <button
-                    type="button"
-                    onClick={handleForgotPassword}
-                    className="text-sm text-primary hover:underline disabled:opacity-60"
-                    disabled={isLoading || loading}
-                  >
-                    Forgot password?
-                  </button>
-                </div>
-                <div className="relative">
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="w-full max-w-md">
+          <Link to="/" className="flex items-center justify-center gap-2 mb-8">
+            <BookOpen className="h-7 w-7 text-primary" />
+            <span className="font-display text-2xl font-bold text-foreground">StoryForge</span>
+          </Link>
+
+          <Card>
+            <CardHeader className="text-center">
+              <CardTitle className="font-display text-2xl">Welcome Back</CardTitle>
+              <CardDescription>Sign in to continue writing</CardDescription>
+            </CardHeader>
+            <form onSubmit={handleSubmit}>
+              <CardContent className="space-y-4">
+                {displayError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{displayError}</AlertDescription>
+                  </Alert>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
                   <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     disabled={isLoading || loading}
-                    className="pr-10"
                     required
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-0 top-0 h-10 px-3 text-muted-foreground hover:text-foreground"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    aria-pressed={showPassword}
-                    disabled={isLoading || loading}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
                 </div>
-              </div>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-4">
-              <Button 
-                type="submit" 
-                className="w-full" 
-                size="lg"
-                disabled={isLoading || loading}
-              >
-                {isLoading || loading ? "Signing In..." : "Sign In"}
-              </Button>
-              <div className="relative w-full">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <button
+                      type="button"
+                      onClick={() => setIsForgotPasswordOpen(true)}
+                      className="text-sm text-primary hover:underline disabled:opacity-60"
+                      disabled={isLoading || loading}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={isLoading || loading}
+                      className="pr-10"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-0 top-0 h-10 px-3 text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-pressed={showPassword}
+                      disabled={isLoading || loading}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground tracking-wide">or</span>
+              </CardContent>
+              <CardFooter className="flex flex-col gap-4">
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  size="lg"
+                  disabled={isLoading || loading}
+                >
+                  {isLoading || loading ? "Signing In..." : "Sign In"}
+                </Button>
+                <div className="relative w-full">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground tracking-wide">or</span>
+                  </div>
                 </div>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                size="lg"
-                onClick={handleGoogleSignIn}
-                disabled={isLoading || loading}
-              >
-                <GoogleIcon />
-                <span className="ml-2">Continue with Google</span>
-              </Button>
-              <p className="text-sm text-muted-foreground text-center">
-                Don't have an account?{" "}
-                <Link to="/signup" className="text-primary hover:underline font-medium">
-                  Sign Up
-                </Link>
-              </p>
-            </CardFooter>
-          </form>
-        </Card>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  size="lg"
+                  onClick={handleGoogleSignIn}
+                  disabled={isLoading || loading}
+                >
+                  <GoogleIcon />
+                  <span className="ml-2">Continue with Google</span>
+                </Button>
+                <p className="text-sm text-muted-foreground text-center">
+                  Don't have an account?{" "}
+                  <Link to="/signup" className="text-primary hover:underline font-medium">
+                    Sign Up
+                  </Link>
+                </p>
+              </CardFooter>
+            </form>
+          </Card>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
