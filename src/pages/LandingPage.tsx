@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -13,6 +13,8 @@ import {
   FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/hooks/use-auth";
 import heroImage from "@/assets/hero-image.jpg";
 
 const coverImagePaths = {
@@ -128,6 +130,13 @@ const playscriptGeneratedCovers = [
 const getGeneratedCover = (format: CoverFormat, index: number) => {
   const coverSet = format === "Story" ? storyGeneratedCovers : playscriptGeneratedCovers;
   return coverSet[index % coverSet.length] ?? onlineImageFallback;
+};
+
+const getInitials = (name: string, email: string) => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  if (parts.length === 1 && parts[0].length > 0) return parts[0].slice(0, 2).toUpperCase();
+  return email.slice(0, 2).toUpperCase() || "WR";
 };
 
 const buildOpenLibrarySearchHref = (title: string, author: string) =>
@@ -341,12 +350,37 @@ const editorsPick = editorsPickWorks.slice(0, 6).map((work, index) => ({
 }));
 
 const LandingPage = () => {
+  const { user, userProfile } = useAuth();
   const [trendingItems, setTrendingItems] = useState<TrendingItem[]>(fallbackTrendingNow);
   const [trendingState, setTrendingState] = useState<"loading" | "live" | "fallback">("loading");
   const [trendingUpdatedAt, setTrendingUpdatedAt] = useState<string | null>(null);
   const [liveCoversByTitle, setLiveCoversByTitle] = useState<Record<string, string>>({});
+  const isAuthenticated = Boolean(user);
+  const profileName =
+    userProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Writer";
+  const profileEmail = userProfile?.email || user?.email || "No email";
+  const profileInitials = getInitials(profileName, profileEmail);
   const readerShelfItems = trendingItems.slice(0, 4);
   const trendingNowItems = trendingItems.slice(0, 8);
+  const rankedTrendingItems = useMemo(
+    () =>
+      trendingNowItems.map((item, index) => {
+        const rankScore = item.score ?? Math.max(220, 1200 - index * 110);
+        return {
+          ...item,
+          rankScore,
+          estimatedReads: Math.round(rankScore * 38 + 14000),
+          estimatedLikes: Math.round(rankScore * 7 + 1800),
+        };
+      }),
+    [trendingNowItems]
+  );
+  const mostReadItems = [...rankedTrendingItems]
+    .sort((a, b) => b.estimatedReads - a.estimatedReads)
+    .slice(0, 4);
+  const mostLikedItems = [...rankedTrendingItems]
+    .sort((a, b) => b.estimatedLikes - a.estimatedLikes)
+    .slice(0, 4);
 
   const getCoverSrc = (title: string, fallbackSrc: string) =>
     liveCoversByTitle[title] ?? fallbackSrc;
@@ -468,22 +502,50 @@ const LandingPage = () => {
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="container mx-auto flex items-center justify-between h-16 px-6">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to={isAuthenticated ? "/home" : "/"} className="flex items-center gap-2">
             <BookOpen className="h-6 w-6 text-primary" />
             <span className="font-display text-xl font-bold text-foreground">StoryForge</span>
           </Link>
           <div className="hidden md:flex items-center gap-8 font-body text-sm">
             <a href="#discover" className="text-muted-foreground hover:text-foreground transition-colors">Discover</a>
             <a href="#topics" className="text-muted-foreground hover:text-foreground transition-colors">Topics</a>
-            <a href="#workflow" className="text-muted-foreground hover:text-foreground transition-colors">Workflow</a>
+            <a href="#for-you" className="text-muted-foreground hover:text-foreground transition-colors">For You</a>
+            <a href="#most-read" className="text-muted-foreground hover:text-foreground transition-colors">Most Read</a>
+            <a href="#most-liked" className="text-muted-foreground hover:text-foreground transition-colors">Most Liked</a>
+            {!isAuthenticated && (
+              <a href="#workflow" className="text-muted-foreground hover:text-foreground transition-colors">Workflow</a>
+            )}
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" asChild>
-              <Link to="/signin">Sign In</Link>
-            </Button>
-            <Button asChild>
-              <Link to="/signup">Get Started</Link>
-            </Button>
+            {isAuthenticated ? (
+              <>
+                <Button variant="outline" size="sm" className="sm:hidden" asChild>
+                  <Link to="/dashboard">Profile</Link>
+                </Button>
+                <Link
+                  to="/dashboard"
+                  className="hidden sm:flex items-center gap-2 rounded-full border border-border bg-card px-2.5 py-1.5 hover:border-primary/40 transition-colors"
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={userProfile?.photoURL || ""} alt={profileName} />
+                    <AvatarFallback>{profileInitials}</AvatarFallback>
+                  </Avatar>
+                  <div className="leading-tight">
+                    <p className="font-body text-sm font-medium text-foreground">{profileName}</p>
+                    <p className="font-body text-[11px] text-muted-foreground">Open Dashboard</p>
+                  </div>
+                </Link>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" asChild>
+                  <Link to="/signin">Sign In</Link>
+                </Button>
+                <Button asChild>
+                  <Link to="/signup">Get Started</Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -504,31 +566,53 @@ const LandingPage = () => {
             className="max-w-2xl"
           >
             <p className="text-primary font-body font-semibold tracking-widest uppercase text-sm mb-4">
-              Read. Write. Publish.
+              {isAuthenticated ? "Welcome Back" : "Read. Write. Publish."}
             </p>
             <h1 className="font-display text-5xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6 text-balance">
-              Discover stories, keep your reading flow, and publish your own chapters.
+              {isAuthenticated
+                ? "Your recommendation feed is ready."
+                : "Discover stories, keep your reading flow, and publish your own chapters."}
             </h1>
             <p className="font-body text-lg md:text-xl text-muted-foreground max-w-xl mb-10 leading-relaxed">
-              Build episodes, draft scenes, and publish faster with a writer-first platform designed to feel familiar to story readers and serial fiction creators.
+              {isAuthenticated
+                ? "Explore trending reads, topics matched to your interests, and picks you might also like before jumping into your writing workspace."
+                : "Build episodes, draft scenes, and publish faster with a writer-first platform designed to feel familiar to story readers and serial fiction creators."}
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button size="lg" className="text-base px-8 py-6" asChild>
-                <Link to="/dashboard">Start Writing Free</Link>
-              </Button>
-              <Button size="lg" variant="outline" className="text-base px-8 py-6" asChild>
-                <a href="#discover">Explore Trending</a>
-              </Button>
+              {isAuthenticated ? (
+                <>
+                  <Button size="lg" className="text-base px-8 py-6" asChild>
+                    <a href="#discover">Trending Now</a>
+                  </Button>
+                  <Button size="lg" variant="outline" className="text-base px-8 py-6" asChild>
+                    <a href="#for-you">You Might Also Like</a>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button size="lg" className="text-base px-8 py-6" asChild>
+                    <Link to="/signup">Get Started Free</Link>
+                  </Button>
+                  <Button size="lg" variant="outline" className="text-base px-8 py-6" asChild>
+                    <a href="#discover">Explore Trending</a>
+                  </Button>
+                </>
+              )}
             </div>
+            {isAuthenticated && (
+              <p className="mt-4 font-body text-sm text-muted-foreground">
+                Ready to write your own article? Tap your profile at the top-right to enter your dashboard.
+              </p>
+            )}
             <div className="mt-8 flex flex-wrap gap-3">
               <span className="rounded-full border border-border bg-card/80 px-4 py-2 text-xs font-body text-foreground">
-                120K+ Story Drafts
+                {isAuthenticated ? "Fresh Picks Every Session" : "120K+ Story Drafts"}
               </span>
               <span className="rounded-full border border-border bg-card/80 px-4 py-2 text-xs font-body text-foreground">
-                18K+ Playscript Scenes
+                {isAuthenticated ? "Topics For You" : "18K+ Playscript Scenes"}
               </span>
               <span className="rounded-full border border-border bg-card/80 px-4 py-2 text-xs font-body text-foreground">
-                Real-Time Autosave
+                {isAuthenticated ? "Most Read & Most Liked" : "Real-Time Autosave"}
               </span>
             </div>
           </motion.div>
@@ -650,10 +734,11 @@ const LandingPage = () => {
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
             className="flex items-center gap-2 mb-5"
+            id="for-you"
           >
             <Star className="h-5 w-5 text-primary" />
             <h3 className="font-display text-2xl md:text-3xl font-bold text-foreground">
-              Editor's Pick
+              You Might Also Like These
             </h3>
           </motion.div>
 
@@ -687,44 +772,139 @@ const LandingPage = () => {
               </motion.article>
             ))}
           </div>
-        </div>
-      </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-20 md:py-32 bg-card">
-        <div className="container mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-16"
-          >
-            <p className="text-primary font-body font-semibold tracking-widest uppercase text-sm mb-3">Crafted for Writers</p>
-            <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
-              Everything You Need to Write
-            </h2>
-          </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {features.map((feature, i) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="bg-background rounded-lg p-8 border border-border hover:border-primary/30 transition-colors group"
-              >
-                <div className="h-12 w-12 rounded-lg bg-warm-light flex items-center justify-center mb-5 group-hover:bg-primary/20 transition-colors">
-                  <feature.icon className="h-6 w-6 text-primary" />
-                </div>
-                <h3 className="font-display text-xl font-semibold text-foreground mb-2">{feature.title}</h3>
-                <p className="font-body text-muted-foreground leading-relaxed">{feature.description}</p>
-              </motion.div>
-            ))}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-14">
+            <motion.article
+              id="most-read"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="rounded-xl border border-border bg-background p-5"
+            >
+              <h4 className="font-display text-2xl font-semibold text-foreground mb-1">Most Read</h4>
+              <p className="font-body text-sm text-muted-foreground mb-4">
+                Stories currently drawing the biggest reading momentum.
+              </p>
+              <div className="space-y-3">
+                {mostReadItems.map((story, index) => (
+                  <a
+                    key={`most-read-${story.title}`}
+                    href={story.href}
+                    target={story.href ? "_blank" : undefined}
+                    rel={story.href ? "noreferrer" : undefined}
+                    className="flex items-center gap-3 rounded-lg border border-border p-2.5 hover:border-primary/40 transition-colors"
+                  >
+                    <span className="w-6 text-center font-display text-lg text-primary">{index + 1}</span>
+                    <div className="h-14 w-10 overflow-hidden rounded-md border border-border bg-muted shrink-0">
+                      <img
+                        src={getCoverSrc(story.title, story.imageSrc)}
+                        alt={story.title}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = onlineImageFallback;
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-body text-sm font-medium text-foreground truncate">{story.title}</p>
+                      <p className="font-body text-xs text-muted-foreground">{story.category}</p>
+                    </div>
+                    <span className="ml-auto font-body text-xs text-muted-foreground whitespace-nowrap">
+                      {story.estimatedReads.toLocaleString()} reads
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </motion.article>
+
+            <motion.article
+              id="most-liked"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.05 }}
+              className="rounded-xl border border-border bg-background p-5"
+            >
+              <h4 className="font-display text-2xl font-semibold text-foreground mb-1">Most Liked</h4>
+              <p className="font-body text-sm text-muted-foreground mb-4">
+                Picks getting the strongest positive reactions right now.
+              </p>
+              <div className="space-y-3">
+                {mostLikedItems.map((story, index) => (
+                  <a
+                    key={`most-liked-${story.title}`}
+                    href={story.href}
+                    target={story.href ? "_blank" : undefined}
+                    rel={story.href ? "noreferrer" : undefined}
+                    className="flex items-center gap-3 rounded-lg border border-border p-2.5 hover:border-primary/40 transition-colors"
+                  >
+                    <span className="w-6 text-center font-display text-lg text-primary">{index + 1}</span>
+                    <div className="h-14 w-10 overflow-hidden rounded-md border border-border bg-muted shrink-0">
+                      <img
+                        src={getCoverSrc(story.title, story.imageSrc)}
+                        alt={story.title}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = onlineImageFallback;
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-body text-sm font-medium text-foreground truncate">{story.title}</p>
+                      <p className="font-body text-xs text-muted-foreground">{story.category}</p>
+                    </div>
+                    <span className="ml-auto font-body text-xs text-muted-foreground whitespace-nowrap">
+                      {story.estimatedLikes.toLocaleString()} likes
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </motion.article>
           </div>
         </div>
       </section>
+
+      {!isAuthenticated && (
+        <section id="features" className="py-20 md:py-32 bg-card">
+          <div className="container mx-auto px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="text-center mb-16"
+            >
+              <p className="text-primary font-body font-semibold tracking-widest uppercase text-sm mb-3">Crafted for Writers</p>
+              <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
+                Everything You Need to Write
+              </h2>
+            </motion.div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+              {features.map((feature, i) => (
+                <motion.div
+                  key={feature.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: i * 0.1 }}
+                  className="bg-background rounded-lg p-8 border border-border hover:border-primary/30 transition-colors group"
+                >
+                  <div className="h-12 w-12 rounded-lg bg-warm-light flex items-center justify-center mb-5 group-hover:bg-primary/20 transition-colors">
+                    <feature.icon className="h-6 w-6 text-primary" />
+                  </div>
+                  <h3 className="font-display text-xl font-semibold text-foreground mb-2">{feature.title}</h3>
+                  <p className="font-body text-muted-foreground leading-relaxed">{feature.description}</p>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Topics Section */}
       <section id="topics" className="py-20 md:py-28">
@@ -778,43 +958,44 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* How It Works */}
-      <section id="workflow" className="py-20 md:py-32">
-        <div className="container mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-16"
-          >
-            <p className="text-primary font-body font-semibold tracking-widest uppercase text-sm mb-3">Simple Workflow</p>
-            <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
-              From Idea to Final Draft
-            </h2>
-          </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 max-w-4xl mx-auto">
-            {[
-              { step: "01", title: "Create or Upload", desc: "Start a new story or playscript, or upload existing files." },
-              { step: "02", title: "Write & Organize", desc: "Use specialized editors with auto-save and version history." },
-              { step: "03", title: "Export & Share", desc: "Export to any format or share with collaborators securely." },
-            ].map((item, i) => (
-              <motion.div
-                key={item.step}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.15 }}
-                className="text-center"
-              >
-                <div className="font-display text-6xl font-bold text-primary/20 mb-4">{item.step}</div>
-                <h3 className="font-display text-xl font-semibold text-foreground mb-2">{item.title}</h3>
-                <p className="font-body text-muted-foreground">{item.desc}</p>
-              </motion.div>
-            ))}
+      {!isAuthenticated && (
+        <section id="workflow" className="py-20 md:py-32">
+          <div className="container mx-auto px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="text-center mb-16"
+            >
+              <p className="text-primary font-body font-semibold tracking-widest uppercase text-sm mb-3">Simple Workflow</p>
+              <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
+                From Idea to Final Draft
+              </h2>
+            </motion.div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-12 max-w-4xl mx-auto">
+              {[
+                { step: "01", title: "Create or Upload", desc: "Start a new story or playscript, or upload existing files." },
+                { step: "02", title: "Write & Organize", desc: "Use specialized editors with auto-save and version history." },
+                { step: "03", title: "Export & Share", desc: "Export to any format or share with collaborators securely." },
+              ].map((item, i) => (
+                <motion.div
+                  key={item.step}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: i * 0.15 }}
+                  className="text-center"
+                >
+                  <div className="font-display text-6xl font-bold text-primary/20 mb-4">{item.step}</div>
+                  <h3 className="font-display text-xl font-semibold text-foreground mb-2">{item.title}</h3>
+                  <p className="font-body text-muted-foreground">{item.desc}</p>
+                </motion.div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* CTA Section */}
       <section className="py-20 md:py-32 bg-card">
@@ -827,14 +1008,22 @@ const LandingPage = () => {
             className="max-w-2xl mx-auto text-center"
           >
             <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-6">
-              Ready to Forge Your Story?
+              {isAuthenticated ? "Ready to Start Your Own Article?" : "Ready to Forge Your Story?"}
             </h2>
             <p className="font-body text-lg text-muted-foreground mb-10">
-              Join writers who trust StoryForge to keep their words safe, organized, and beautifully formatted.
+              {isAuthenticated
+                ? "Use the profile button at the top-right to open your dashboard and start writing anytime."
+                : "Join writers who trust StoryForge to keep their words safe, organized, and beautifully formatted."}
             </p>
-            <Button size="lg" className="text-base px-10 py-6" asChild>
-              <Link to="/dashboard">Get Started — It's Free</Link>
-            </Button>
+            {isAuthenticated ? (
+              <Button size="lg" variant="outline" className="text-base px-10 py-6" asChild>
+                <a href="#discover">Keep Exploring Recommendations</a>
+              </Button>
+            ) : (
+              <Button size="lg" className="text-base px-10 py-6" asChild>
+                <Link to="/signup">Get Started — It's Free</Link>
+              </Button>
+            )}
           </motion.div>
         </div>
       </section>

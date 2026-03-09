@@ -45,7 +45,7 @@ const SignUp = () => {
     try {
       setIsLoading(true);
       await signUp(email, password, name);
-      navigate("/dashboard");
+      navigate("/home");
     } catch (err) {
       setError(
         err instanceof Error

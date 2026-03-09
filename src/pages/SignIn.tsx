@@ -55,7 +55,7 @@ const SignIn = () => {
     try {
       setIsLoading(true);
       await signIn(email, password);
-      navigate("/dashboard");
+      navigate("/home");
     } catch (err) {
       setError(
         err instanceof Error
@@ -72,7 +72,7 @@ const SignIn = () => {
     try {
       setIsLoading(true);
       await signInWithGoogle();
-      navigate("/dashboard");
+      navigate("/home");
     } catch (err) {
       setError(
         err instanceof Error
