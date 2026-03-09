@@ -15,6 +15,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/use-auth";
+import { useDocuments } from "@/hooks/use-documents";
+import {
+  getTopicsForYouRecommendations,
+  getTrendingRecommendations,
+  type TopicRecommendation,
+} from "@/lib/recommendations";
 
 const coverImagePaths = {
   tellTaleHeart: "/covers/tell-tale-heart.svg",
@@ -324,7 +330,7 @@ const coverLookupTargets = Array.from(
   ).values()
 );
 
-const recommendedTopics = topicsForYouWorks.slice(0, 6).map((work, index) => ({
+const fallbackRecommendedTopics: TopicRecommendation[] = topicsForYouWorks.slice(0, 6).map((work, index) => ({
   title: work.title,
   format: work.format,
   description: work.topicDescription,
@@ -350,9 +356,13 @@ const editorsPick = editorsPickWorks.slice(0, 6).map((work, index) => ({
 
 const HomeLandingPage = () => {
   const { user, userProfile } = useAuth();
+  const { documents } = useDocuments();
   const [trendingItems, setTrendingItems] = useState<TrendingItem[]>(fallbackTrendingNow);
-  const [trendingState, setTrendingState] = useState<"loading" | "live" | "fallback">("loading");
+  const [trendingState, setTrendingState] = useState<"loading" | "live" | "cache" | "fallback">("loading");
   const [trendingUpdatedAt, setTrendingUpdatedAt] = useState<string | null>(null);
+  const [recommendedTopics, setRecommendedTopics] = useState<TopicRecommendation[]>(fallbackRecommendedTopics);
+  const [topicsState, setTopicsState] = useState<"loading" | "live" | "cache" | "fallback">("loading");
+  const [topicsUpdatedAt, setTopicsUpdatedAt] = useState<string | null>(null);
   const [liveCoversByTitle, setLiveCoversByTitle] = useState<Record<string, string>>({});
   const isAuthenticated = Boolean(user);
   const profileName =
@@ -417,83 +427,77 @@ const HomeLandingPage = () => {
   useEffect(() => {
     let cancelled = false;
 
-    const fetchLiveTrending = async () => {
-      try {
-        const sources: Array<{ url: string; format: CoverFormat }> = [
-          { url: "https://www.reddit.com/r/WritingPrompts/top.json?t=day&limit=8", format: "Story" },
-          { url: "https://www.reddit.com/r/shortstories/top.json?t=day&limit=8", format: "Story" },
-          { url: "https://www.reddit.com/r/Screenwriting/top.json?t=day&limit=8", format: "Playscript" },
-        ];
+    const loadTrending = async () => {
+      const result = await getTrendingRecommendations({ limit: 8 });
+      if (cancelled) return;
 
-        const responses = await Promise.allSettled(
-          sources.map(async (source) => {
-            const response = await fetch(source.url);
-            if (!response.ok) return [];
-            const payload = (await response.json()) as {
-              data?: { children?: Array<{ data?: Record<string, unknown> }> };
-            };
-            const children = payload.data?.children ?? [];
-            return children.map((entry) => ({ source, post: entry.data ?? {} }));
-          })
+      if (result.items.length > 0) {
+        setTrendingItems(
+          result.items.map((item, index) => ({
+            ...item,
+            imageSrc: item.imageSrc || getGeneratedCover(item.format, index),
+          }))
         );
-
-        const collected = responses.flatMap((result) =>
-          result.status === "fulfilled" ? result.value : []
-        );
-
-        const liveItems: TrendingItem[] = collected
-          .map(({ source, post }, index) => {
-            const title = typeof post.title === "string" ? post.title : "";
-            const subreddit = typeof post.subreddit === "string" ? post.subreddit : "writing";
-            const permalink = typeof post.permalink === "string" ? post.permalink : "";
-            const ups = typeof post.ups === "number" ? post.ups : 0;
-            const thumbnail =
-              typeof post.thumbnail === "string" && /^https?:\/\//.test(post.thumbnail)
-                ? post.thumbnail
-                : getGeneratedCover(source.format, index);
-            const isPinned = Boolean(post.stickied);
-            const isRemoved = title.toLowerCase().includes("[removed]");
-
-            if (!title || !permalink || isPinned || isRemoved) return null;
-
-            return {
-              title,
-              category: `r/${subreddit}`,
-              format: source.format,
-              reads: `${ups.toLocaleString()} upvotes`,
-              imageSrc: thumbnail,
-              href: `https://www.reddit.com${permalink}`,
-              score: ups,
-              source: "Reddit",
-            } satisfies TrendingItem;
-          })
-          .filter((item): item is TrendingItem => item !== null)
-          .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-          .slice(0, 8);
-
-        if (cancelled) return;
-
-        if (liveItems.length > 0) {
-          setTrendingItems(liveItems);
-          setTrendingState("live");
-          setTrendingUpdatedAt(new Date().toISOString());
-          return;
-        }
-
-        setTrendingItems(fallbackTrendingNow);
-        setTrendingState("fallback");
-      } catch {
-        if (cancelled) return;
-        setTrendingItems(fallbackTrendingNow);
-        setTrendingState("fallback");
+        setTrendingState(result.source === "live" ? "live" : "cache");
+        setTrendingUpdatedAt(result.updatedAt);
+        return;
       }
+
+      setTrendingItems(fallbackTrendingNow);
+      setTrendingState("fallback");
+      setTrendingUpdatedAt(null);
     };
 
-    void fetchLiveTrending();
+    void loadTrending();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadTopicsForYou = async () => {
+      const genres = documents
+        .map((document) => document.genre.trim())
+        .filter((genre) => genre.length > 0 && genre.toLowerCase() !== "uncategorized");
+      const recentTitles = [...documents]
+        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+        .slice(0, 8)
+        .map((document) => document.title.trim())
+        .filter((title) => title.length > 0);
+
+      const result = await getTopicsForYouRecommendations({
+        userId: user?.uid ?? "guest",
+        genres,
+        recentTitles,
+        limit: 6,
+      });
+
+      if (cancelled) return;
+
+      if (result.items.length > 0) {
+        setRecommendedTopics(
+          result.items.map((item, index) => ({
+            ...item,
+            imageSrc: item.imageSrc || getGeneratedCover(item.format, index),
+          }))
+        );
+        setTopicsState(result.source === "live" ? "live" : "cache");
+        setTopicsUpdatedAt(result.updatedAt);
+        return;
+      }
+
+      setRecommendedTopics(fallbackRecommendedTopics);
+      setTopicsState("fallback");
+      setTopicsUpdatedAt(null);
+    };
+
+    void loadTopicsForYou();
+    return () => {
+      cancelled = true;
+    };
+  }, [documents, user?.uid]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -564,9 +568,11 @@ const HomeLandingPage = () => {
             <p className="font-body text-sm text-muted-foreground mt-2">
               {trendingState === "live" && trendingUpdatedAt
                 ? `Live from Reddit · Updated ${new Date(trendingUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                : trendingState === "cache" && trendingUpdatedAt
+                  ? `Showing cached results · Last updated ${new Date(trendingUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                 : trendingState === "loading"
                   ? "Loading live trends..."
-                  : ""}
+                  : "Showing curated picks while live trends sync."}
             </p>
           </motion.div>
 
@@ -803,6 +809,15 @@ const HomeLandingPage = () => {
             <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
               Topics for You
             </h2>
+            <p className="font-body text-sm text-muted-foreground mt-2">
+              {topicsState === "live" && topicsUpdatedAt
+                ? `Personalized from your writing interests · Updated ${new Date(topicsUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                : topicsState === "cache" && topicsUpdatedAt
+                  ? `Using cached personalized topics · Last updated ${new Date(topicsUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                  : topicsState === "loading"
+                    ? "Building your personalized topic feed..."
+                    : "Showing curated topic suggestions."}
+            </p>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
