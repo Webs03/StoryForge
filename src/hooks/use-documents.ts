@@ -33,6 +33,8 @@ export interface Document {
   updatedAt: Date;
 }
 
+const WRITE_TIMEOUT_MS = 45000;
+
 const parseDate = (value: unknown): Date => {
   if (value instanceof Date) return value;
   if (value instanceof Timestamp) return value.toDate();
@@ -67,6 +69,9 @@ const isOfflineError = (err: unknown) => {
 };
 
 const normalizeErrorMessage = (err: unknown, fallback: string) => {
+  if (err instanceof Error && /timed out/i.test(err.message)) {
+    return "Request timed out. Check your internet connection and try again.";
+  }
   if (isOfflineError(err)) {
     return "You are offline. Reconnect to sync your latest documents.";
   }
@@ -75,6 +80,27 @@ const normalizeErrorMessage = (err: unknown, fallback: string) => {
     return "Permission denied while accessing documents. Check Firestore rules.";
   }
   return err instanceof Error ? err.message : fallback;
+};
+
+const withTimeout = async <T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string
+) => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([operation, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 };
 
 const mapDocumentData = (
@@ -188,16 +214,20 @@ export const useDocuments = (options?: { skipInitialFetch?: boolean }) => {
     const genre = options?.genre ?? "Uncategorized";
 
     try {
-      const docRef = await addDoc(collection(firestore, "documents"), {
-        title,
-        content,
-        owner: user.uid,
-        type,
-        status,
-        genre,
-        createdAt: now,
-        updatedAt: now,
-      });
+      const docRef = await withTimeout(
+        addDoc(collection(firestore, "documents"), {
+          title,
+          content,
+          owner: user.uid,
+          type,
+          status,
+          genre,
+          createdAt: now,
+          updatedAt: now,
+        }),
+        WRITE_TIMEOUT_MS,
+        "Saving document timed out."
+      );
 
       const createdAt = now.toDate();
       setDocuments((previous) => [
@@ -229,11 +259,15 @@ export const useDocuments = (options?: { skipInitialFetch?: boolean }) => {
     try {
       const docRef = doc(firestore, "documents", docId);
       const now = Timestamp.now();
-      await updateDoc(docRef, {
-        title,
-        content,
-        updatedAt: now,
-      });
+      await withTimeout(
+        updateDoc(docRef, {
+          title,
+          content,
+          updatedAt: now,
+        }),
+        WRITE_TIMEOUT_MS,
+        "Saving document timed out."
+      );
 
       const updatedAt = now.toDate();
       setDocuments((previous) => {
@@ -254,7 +288,11 @@ export const useDocuments = (options?: { skipInitialFetch?: boolean }) => {
     const firestore = getDbInstance();
 
     try {
-      await deleteDoc(doc(firestore, "documents", docId));
+      await withTimeout(
+        deleteDoc(doc(firestore, "documents", docId)),
+        WRITE_TIMEOUT_MS,
+        "Deleting document timed out."
+      );
       setDocuments((previous) => previous.filter((item) => item.id !== docId));
     } catch (err) {
       throw new Error(normalizeErrorMessage(err, "Failed to delete document"));

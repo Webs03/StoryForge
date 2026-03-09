@@ -317,6 +317,7 @@ const DocumentView = () => {
   };
 
   const handleSave = async () => {
+    if (isSaving) return;
     if (!isNewDocument && (!document || !hasUnsavedChanges)) return;
 
     try {
@@ -335,8 +336,9 @@ const DocumentView = () => {
       await updateDocument(document.id, titleDraft.trim() || "Untitled", contentDraft);
       toast("Changes saved.");
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Failed to save document");
-      toast("Failed to save document.");
+      const message = err instanceof Error ? err.message : "Failed to save document";
+      setSaveError(message);
+      toast(message);
     } finally {
       setIsSaving(false);
     }
