@@ -101,7 +101,9 @@ const SignIn = () => {
     try {
       setIsLoading(true);
       await resetPassword(normalizedEmail);
-      setNotice(`Password reset email sent to ${normalizedEmail}.`);
+      setNotice(
+        `If an account exists for ${normalizedEmail}, you'll receive a password reset email shortly.`
+      );
     } catch (err) {
       setError(
         err instanceof Error

@@ -45,6 +45,12 @@ const getAuthErrorMessage = (err: unknown, fallback: string) => {
       return "Invalid email address format.";
     case "missing-email":
       return "Please enter your email address first.";
+    case "missing-continue-uri":
+      return "Password reset link is missing a destination URL.";
+    case "invalid-continue-uri":
+      return "Password reset link configuration is invalid. Please try again later.";
+    case "unauthorized-continue-uri":
+      return "This domain is not authorized for password reset. Add it in Firebase Authentication > Settings > Authorized domains.";
     case "user-disabled":
       return "This account has been disabled. Contact support if this is unexpected.";
     case "email-already-in-use":
@@ -297,7 +303,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       setError(null);
       const authInstance = getAuthInstance();
-      await sendPasswordResetEmail(authInstance, email.trim());
+      const actionCodeSettings = {
+        url: `${window.location.origin}/signin`,
+        handleCodeInApp: false,
+      };
+      await sendPasswordResetEmail(authInstance, email.trim(), actionCodeSettings);
     } catch (err) {
       const errorMessage = getAuthErrorMessage(err, "Failed to send password reset email");
       setError(errorMessage);

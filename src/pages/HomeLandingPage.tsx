@@ -15,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/use-auth";
-import heroImage from "@/assets/hero-image.jpg";
 
 const coverImagePaths = {
   tellTaleHeart: "/covers/tell-tale-heart.svg",
@@ -360,7 +359,6 @@ const HomeLandingPage = () => {
     userProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Writer";
   const profileEmail = userProfile?.email || user?.email || "No email";
   const profileInitials = getInitials(profileName, profileEmail);
-  const readerShelfItems = trendingItems.slice(0, 4);
   const trendingNowItems = trendingItems.slice(0, 8);
   const rankedTrendingItems = useMemo(
     () =>
@@ -550,122 +548,8 @@ const HomeLandingPage = () => {
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="relative pt-28 pb-20 md:pt-36 md:pb-28 overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <img src={heroImage} alt="Writing desk" className="w-full h-full object-cover opacity-15" />
-          <div className="absolute inset-0 bg-gradient-to-br from-warm-light/80 via-background to-secondary/40" />
-          <div className="absolute -top-28 -left-14 h-72 w-72 rounded-full bg-primary/20 blur-3xl" />
-          <div className="absolute -bottom-32 right-0 h-96 w-96 rounded-full bg-sage/35 blur-3xl" />
-        </div>
-        <div className="container mx-auto px-6 relative z-10 grid lg:grid-cols-[1.05fr_0.95fr] gap-10 xl:gap-14 items-center">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className="max-w-2xl"
-          >
-            <p className="text-primary font-body font-semibold tracking-widest uppercase text-sm mb-4">
-              {isAuthenticated ? "Welcome Back" : "Read. Write. Publish."}
-            </p>
-            <h1 className="font-display text-5xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6 text-balance">
-              {isAuthenticated
-                ? "Your recommendation feed is ready."
-                : "Discover stories, keep your reading flow, and publish your own chapters."}
-            </h1>
-            <p className="font-body text-lg md:text-xl text-muted-foreground max-w-xl mb-10 leading-relaxed">
-              {isAuthenticated
-                ? "Explore trending reads, topics matched to your interests, and picks you might also like before jumping into your writing workspace."
-                : "Build episodes, draft scenes, and publish faster with a writer-first platform designed to feel familiar to story readers and serial fiction creators."}
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              {isAuthenticated ? (
-                <>
-                  <Button size="lg" className="text-base px-8 py-6" asChild>
-                    <a href="#discover">Trending Now</a>
-                  </Button>
-                  <Button size="lg" variant="outline" className="text-base px-8 py-6" asChild>
-                    <a href="#for-you">You Might Also Like</a>
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button size="lg" className="text-base px-8 py-6" asChild>
-                    <Link to="/signup">Get Started Free</Link>
-                  </Button>
-                  <Button size="lg" variant="outline" className="text-base px-8 py-6" asChild>
-                    <a href="#discover">Explore Trending</a>
-                  </Button>
-                </>
-              )}
-            </div>
-            {isAuthenticated && (
-              <p className="mt-4 font-body text-sm text-muted-foreground">
-                Ready to write your own article? Tap your profile at the top-right to enter your dashboard.
-              </p>
-            )}
-            <div className="mt-8 flex flex-wrap gap-3">
-              <span className="rounded-full border border-border bg-card/80 px-4 py-2 text-xs font-body text-foreground">
-                {isAuthenticated ? "Fresh Picks Every Session" : "120K+ Story Drafts"}
-              </span>
-              <span className="rounded-full border border-border bg-card/80 px-4 py-2 text-xs font-body text-foreground">
-                {isAuthenticated ? "Topics For You" : "18K+ Playscript Scenes"}
-              </span>
-              <span className="rounded-full border border-border bg-card/80 px-4 py-2 text-xs font-body text-foreground">
-                {isAuthenticated ? "Most Read & Most Liked" : "Real-Time Autosave"}
-              </span>
-            </div>
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.9, ease: "easeOut", delay: 0.1 }}
-            className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm p-4 md:p-6 shadow-lg"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <p className="font-body text-xs uppercase tracking-[0.2em] text-primary font-semibold">
-                Reader Shelf
-              </p>
-              <span className="text-xs text-muted-foreground font-body">
-                {trendingState === "live"
-                  ? "Updated Live"
-                  : trendingState === "loading"
-                    ? "Syncing..."
-                    : "Curated Picks"}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              {readerShelfItems.map((story) => (
-                <article
-                  key={`${story.title}-shelf`}
-                  className="rounded-xl overflow-hidden border border-border bg-background shadow-sm"
-                >
-                  <div className="relative aspect-[3/4] overflow-hidden">
-                    <img
-                      src={getCoverSrc(story.title, story.imageSrc)}
-                      alt={story.title}
-                      loading="lazy"
-                      className="w-full h-full object-cover"
-                      onError={(event) => {
-                        event.currentTarget.onerror = null;
-                        event.currentTarget.src = onlineImageFallback;
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                    <div className="absolute left-3 right-3 bottom-3">
-                      <p className="font-body text-[10px] uppercase tracking-wide text-white/90 mb-1">{story.format}</p>
-                      <h3 className="font-display text-sm font-semibold text-white leading-tight line-clamp-2">{story.title}</h3>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
       {/* Discover Section */}
-      <section id="discover" className="py-20 md:py-28 bg-card">
+      <section id="discover" className="pt-24 pb-20 md:pt-28 md:pb-28 bg-card">
         <div className="container mx-auto px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -674,7 +558,6 @@ const HomeLandingPage = () => {
             transition={{ duration: 0.6 }}
             className="text-center mb-12"
           >
-            <p className="text-primary font-body font-semibold tracking-widest uppercase text-sm mb-3">Discover</p>
             <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
               Trending Now
             </h2>
