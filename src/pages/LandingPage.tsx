@@ -21,20 +21,21 @@ import {
   type TrendingRecommendation,
 } from "@/lib/recommendations";
 import { buildReaderUrl } from "@/lib/reader-link";
+import { publicAssetPath } from "@/lib/public-asset";
 import heroImage from "@/assets/hero-image.jpg";
 
 const coverImagePaths = {
-  tellTaleHeart: "/covers/tell-tale-heart.svg",
-  hamlet: "/covers/hamlet.svg",
-  giftOfTheMagi: "/covers/gift-of-the-magi.svg",
-  theLottery: "/covers/the-lottery.svg",
-  aRaisinInTheSun: "/covers/a-raisin-in-the-sun.svg",
-  yellowWallpaper: "/covers/yellow-wallpaper.svg",
-  aDollsHouse: "/covers/a-dolls-house.svg",
-  lastLeaf: "/covers/last-leaf.svg",
-  deathOfASalesman: "/covers/death-of-a-salesman.svg",
-  romeoAndJuliet: "/covers/romeo-and-juliet.svg",
-  fallback: "/covers/fallback-cover.svg",
+  tellTaleHeart: publicAssetPath("covers/tell-tale-heart.svg"),
+  hamlet: publicAssetPath("covers/hamlet.svg"),
+  giftOfTheMagi: publicAssetPath("covers/gift-of-the-magi.svg"),
+  theLottery: publicAssetPath("covers/the-lottery.svg"),
+  aRaisinInTheSun: publicAssetPath("covers/a-raisin-in-the-sun.svg"),
+  yellowWallpaper: publicAssetPath("covers/yellow-wallpaper.svg"),
+  aDollsHouse: publicAssetPath("covers/a-dolls-house.svg"),
+  lastLeaf: publicAssetPath("covers/last-leaf.svg"),
+  deathOfASalesman: publicAssetPath("covers/death-of-a-salesman.svg"),
+  romeoAndJuliet: publicAssetPath("covers/romeo-and-juliet.svg"),
+  fallback: publicAssetPath("covers/fallback-cover.svg"),
 } as const;
 
 const features = [

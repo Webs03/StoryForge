@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { parseReaderPayload, type ReaderLinkPayload } from "@/lib/reader-link";
+import { publicAssetPath } from "@/lib/public-asset";
 
 type ReaderStatus = "idle" | "loading" | "ready" | "error";
 type SourceProvider = "reddit" | "openlibrary" | "googlebooks" | "gutendex" | "unknown";
@@ -52,7 +53,7 @@ type GutendexResponse = {
   }>;
 };
 
-const FALLBACK_IMAGE = "/covers/fallback-cover.svg";
+const FALLBACK_IMAGE = publicAssetPath("covers/fallback-cover.svg");
 const MAX_FULLTEXT_CHARS = 1_200_000;
 const PARAGRAPHS_PER_PAGE = 40;
 

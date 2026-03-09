@@ -1,3 +1,5 @@
+import { publicAssetPath } from "@/lib/public-asset";
+
 export type RecommendationFormat = "Story" | "Playscript";
 
 export interface TrendingRecommendation {
@@ -30,7 +32,7 @@ export interface RecommendationFetchResult<T> {
 const TRENDING_CACHE_KEY = "sf:recommendations:trending:v1";
 const TRENDING_TTL_MS = 15 * 60 * 1000;
 const TOPICS_TTL_MS = 6 * 60 * 60 * 1000;
-const FALLBACK_IMAGE = "/covers/fallback-cover.svg";
+const FALLBACK_IMAGE = publicAssetPath("covers/fallback-cover.svg");
 
 const DEFAULT_TOPICS = [
   "fantasy_fiction",
