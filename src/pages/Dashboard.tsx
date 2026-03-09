@@ -71,12 +71,11 @@ const getInitials = (name: string, email: string) => {
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, userProfile, logOut } = useAuth();
-  const { documents, loading, error, createDocument } = useDocuments();
+  const { documents, loading, error } = useDocuments();
   const [typeFilter, setTypeFilter] = useState<WorkType>("all");
   const [statusFilter, setStatusFilter] = useState<StatusType>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
-  const [creatingType, setCreatingType] = useState<DocumentType | null>(null);
 
   const profileName =
     userProfile?.name || user?.displayName || user?.email?.split("@")[0] || "Writer";
@@ -102,22 +101,10 @@ const Dashboard = () => {
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
     .slice(0, 3);
 
-  const handleCreate = async (type: DocumentType) => {
-    try {
-      setActionError(null);
-      setCreatingType(type);
-      toast(type === "story" ? "Opening your new story..." : "Opening your new playscript...");
-      const docId = await createDocument(
-        type === "story" ? "Untitled Story" : "Untitled Playscript",
-        "",
-        { type, status: "Draft" }
-      );
-      navigate(`/document/${docId}`);
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to create new work");
-    } finally {
-      setCreatingType(null);
-    }
+  const handleCreate = (type: DocumentType) => {
+    setActionError(null);
+    toast(type === "story" ? "Opening your new story..." : "Opening your new playscript...");
+    navigate(`/document/new?type=${type}`);
   };
 
   const handleLogout = async () => {
@@ -153,7 +140,6 @@ const Dashboard = () => {
             <Button
               size="sm"
               onClick={() => handleCreate("story")}
-              disabled={creatingType !== null}
             >
               <Plus className="h-4 w-4 mr-1" /> New Story
             </Button>
@@ -195,13 +181,12 @@ const Dashboard = () => {
             </p>
           )}
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button onClick={() => handleCreate("story")} disabled={creatingType !== null}>
+            <Button onClick={() => handleCreate("story")}>
               <Plus className="h-4 w-4 mr-1" /> New Story
             </Button>
             <Button
               variant="outline"
               onClick={() => handleCreate("playscript")}
-              disabled={creatingType !== null}
             >
               <Theater className="h-4 w-4 mr-1" /> New Playscript
             </Button>
@@ -313,7 +298,6 @@ const Dashboard = () => {
                   size="sm"
                   variant="outline"
                   onClick={() => handleCreate("story")}
-                  disabled={creatingType !== null}
                 >
                   <Plus className="h-4 w-4 mr-1" /> Add
                 </Button>
@@ -395,13 +379,12 @@ const Dashboard = () => {
                     Adjust filters or create your first document for this account.
                   </p>
                   <div className="flex flex-col sm:flex-row justify-center gap-3">
-                    <Button onClick={() => handleCreate("story")} disabled={creatingType !== null}>
+                    <Button onClick={() => handleCreate("story")}>
                       <Plus className="h-4 w-4 mr-1" /> New Story
                     </Button>
                     <Button
                       variant="outline"
                       onClick={() => handleCreate("playscript")}
-                      disabled={creatingType !== null}
                     >
                       <Theater className="h-4 w-4 mr-1" /> New Playscript
                     </Button>

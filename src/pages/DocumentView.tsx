@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -24,7 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useDocuments } from "@/hooks/use-documents";
+import { useDocuments, type DocumentType } from "@/hooks/use-documents";
 
 const formatRelativeTime = (value: Date) => {
   const diff = Date.now() - value.getTime();
@@ -40,7 +40,21 @@ const formatRelativeTime = (value: Date) => {
 
 const DocumentView = () => {
   const { id } = useParams();
-  const { documents, loading, error, getDocumentById, updateDocument } = useDocuments({
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isNewDocument = id === "new";
+  const requestedType = searchParams.get("type");
+  const draftType: DocumentType = requestedType === "playscript" ? "playscript" : "story";
+  const defaultTitle = draftType === "playscript" ? "Untitled Playscript" : "Untitled Story";
+
+  const {
+    documents,
+    loading,
+    error,
+    createDocument,
+    getDocumentById,
+    updateDocument,
+  } = useDocuments({
     skipInitialFetch: true,
   });
   const [titleDraft, setTitleDraft] = useState("");
@@ -63,7 +77,12 @@ const DocumentView = () => {
   }, [document]);
 
   useEffect(() => {
-    if (!id || document || resolveAttemptedForId === id) return;
+    if (!isNewDocument) return;
+    setTitleDraft((previous) => (previous.trim().length > 0 ? previous : defaultTitle));
+  }, [isNewDocument, defaultTitle]);
+
+  useEffect(() => {
+    if (isNewDocument || !id || document || resolveAttemptedForId === id) return;
 
     let cancelled = false;
 
@@ -88,29 +107,40 @@ const DocumentView = () => {
     return () => {
       cancelled = true;
     };
-  }, [id, document, getDocumentById, resolveAttemptedForId]);
+  }, [id, isNewDocument, document, getDocumentById, resolveAttemptedForId]);
 
   useEffect(() => {
     setResolveAttemptedForId(null);
     setDocumentLoadError(null);
-  }, [id]);
+  }, [id, isNewDocument]);
 
-  const hasUnsavedChanges =
-    !!document &&
-    (titleDraft !== document.title || contentDraft !== document.content);
+  const hasUnsavedChanges = isNewDocument
+    ? titleDraft.trim().length > 0 || contentDraft.trim().length > 0
+    : !!document && (titleDraft !== document.title || contentDraft !== document.content);
 
   const wordCount = contentDraft.trim()
     ? contentDraft.trim().split(/\s+/).length
     : 0;
   const readMinutes = Math.max(1, Math.ceil(wordCount / 250));
-  const isPlayscript = document?.type === "playscript";
+  const isPlayscript = isNewDocument
+    ? draftType === "playscript"
+    : document?.type === "playscript";
 
   const handleSave = async () => {
-    if (!document || !hasUnsavedChanges) return;
-
     try {
       setSaveError(null);
       setIsSaving(true);
+      if (isNewDocument) {
+        const docId = await createDocument(titleDraft.trim() || defaultTitle, contentDraft, {
+          type: draftType,
+          status: "Draft",
+        });
+        navigate(`/document/${docId}`, { replace: true });
+        return;
+      }
+
+      if (!document || !hasUnsavedChanges) return;
+
       await updateDocument(document.id, titleDraft.trim() || "Untitled", contentDraft);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save document");
@@ -119,7 +149,7 @@ const DocumentView = () => {
     }
   };
 
-  if ((loading && !document) || isResolvingDocument) {
+  if (!isNewDocument && ((loading && !document) || isResolvingDocument)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground font-body">
@@ -130,7 +160,7 @@ const DocumentView = () => {
     );
   }
 
-  if ((error || documentLoadError) && !document) {
+  if (!isNewDocument && (error || documentLoadError) && !document) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-6">
         <div className="text-center">
@@ -144,7 +174,7 @@ const DocumentView = () => {
     );
   }
 
-  if (!document) {
+  if (!isNewDocument && !document) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-6">
         <div className="text-center">
@@ -172,13 +202,17 @@ const DocumentView = () => {
             <Separator orientation="vertical" className="h-5" />
             <div className="flex items-center gap-2">
               {isPlayscript ? <Theater className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
-              <span className="font-display font-semibold text-foreground line-clamp-1">{document.title}</span>
+              <span className="font-display font-semibold text-foreground line-clamp-1">
+                {titleDraft.trim() || defaultTitle}
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="bg-warm-light text-primary text-xs">{document.status}</Badge>
+            <Badge variant="secondary" className="bg-warm-light text-primary text-xs">
+              {document?.status ?? "Draft"}
+            </Badge>
             <span className="text-xs text-muted-foreground font-body hidden sm:inline">
-              Saved {formatRelativeTime(document.updatedAt)}
+              {isNewDocument ? "Not saved yet" : `Saved ${formatRelativeTime(document!.updatedAt)}`}
             </span>
             <Button variant="ghost" size="sm" onClick={handleSave} disabled={!hasUnsavedChanges || isSaving}>
               <Save className="h-4 w-4 mr-1" />
@@ -198,12 +232,13 @@ const DocumentView = () => {
           className="mb-8"
         >
           <div className="flex flex-wrap items-center gap-4 text-sm font-body text-muted-foreground mb-6">
-            <span>{document.genre}</span>
+            <span>{document?.genre ?? "Uncategorized"}</span>
             <span>·</span>
             <span>{wordCount.toLocaleString()} words</span>
             <span>·</span>
             <span className="flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5" /> Updated {formatRelativeTime(document.updatedAt)}
+              <Clock className="h-3.5 w-3.5" />{" "}
+              {isNewDocument ? "Draft not saved yet" : `Updated ${formatRelativeTime(document!.updatedAt)}`}
             </span>
           </div>
           {saveError && (
@@ -243,7 +278,7 @@ const DocumentView = () => {
           <Textarea
             value={contentDraft}
             onChange={(event) => setContentDraft(event.target.value)}
-            placeholder="Start writing your story..."
+            placeholder={isPlayscript ? "Start writing your playscript..." : "Start writing your story..."}
             className="font-body text-foreground/90 leading-[1.9] text-base md:text-lg min-h-[52vh] border-0 shadow-none resize-none px-0 focus-visible:ring-0"
           />
         </motion.div>
