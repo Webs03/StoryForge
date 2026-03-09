@@ -105,8 +105,9 @@ const mapSnapshotToDocuments = (
   return docs;
 };
 
-export const useDocuments = () => {
+export const useDocuments = (options?: { skipInitialFetch?: boolean }) => {
   const { user } = useAuth();
+  const skipInitialFetch = options?.skipInitialFetch ?? false;
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +131,12 @@ export const useDocuments = () => {
     if (!user) {
       setDocuments([]);
       setLoading(false);
+      return;
+    }
+
+    if (skipInitialFetch) {
+      setLoading(false);
+      setError(null);
       return;
     }
 
@@ -164,7 +171,7 @@ export const useDocuments = () => {
     };
 
     fetchDocuments();
-  }, [user]);
+  }, [user, skipInitialFetch]);
 
   // Create new document
   const createDocument = async (

@@ -40,7 +40,9 @@ const formatRelativeTime = (value: Date) => {
 
 const DocumentView = () => {
   const { id } = useParams();
-  const { documents, loading, error, getDocumentById, updateDocument } = useDocuments();
+  const { documents, loading, error, getDocumentById, updateDocument } = useDocuments({
+    skipInitialFetch: true,
+  });
   const [titleDraft, setTitleDraft] = useState("");
   const [contentDraft, setContentDraft] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -61,7 +63,7 @@ const DocumentView = () => {
   }, [document]);
 
   useEffect(() => {
-    if (!id || loading || error || document || resolveAttemptedForId === id) return;
+    if (!id || document || resolveAttemptedForId === id) return;
 
     let cancelled = false;
 
@@ -86,7 +88,7 @@ const DocumentView = () => {
     return () => {
       cancelled = true;
     };
-  }, [id, loading, error, document, getDocumentById, resolveAttemptedForId]);
+  }, [id, document, getDocumentById, resolveAttemptedForId]);
 
   useEffect(() => {
     setResolveAttemptedForId(null);
@@ -117,7 +119,7 @@ const DocumentView = () => {
     }
   };
 
-  if (loading || isResolvingDocument) {
+  if ((loading && !document) || isResolvingDocument) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground font-body">
@@ -128,7 +130,7 @@ const DocumentView = () => {
     );
   }
 
-  if (error || documentLoadError) {
+  if ((error || documentLoadError) && !document) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-6">
         <div className="text-center">

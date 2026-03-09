@@ -102,7 +102,7 @@ const SignIn = () => {
       setIsLoading(true);
       await resetPassword(normalizedEmail);
       setNotice(
-        `If an account exists for ${normalizedEmail}, you'll receive a password reset email shortly.`
+        `If an account exists for ${normalizedEmail}, you'll receive a password reset email shortly. Check spam/promotions if it doesn't appear.`
       );
     } catch (err) {
       setError(

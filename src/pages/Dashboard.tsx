@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { toast } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/use-auth";
 import {
   type Document,
@@ -105,6 +106,7 @@ const Dashboard = () => {
     try {
       setActionError(null);
       setCreatingType(type);
+      toast(type === "story" ? "Opening your new story..." : "Opening your new playscript...");
       const docId = await createDocument(
         type === "story" ? "Untitled Story" : "Untitled Playscript",
         "",

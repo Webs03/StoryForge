@@ -10,7 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 const SignUp = () => {
   const navigate = useNavigate();
-  const { signUp, loading, error: authError } = useAuth();
+  const { signUp, resetPassword, loading, error: authError } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,11 +18,13 @@ const SignUp = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string>("");
+  const [notice, setNotice] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setNotice("");
 
     // Validation
     if (!name.trim()) {
@@ -57,6 +59,32 @@ const SignUp = () => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    setError("");
+    setNotice("");
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      setError("Enter your email address first, then click Forgot password.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await resetPassword(normalizedEmail);
+      setNotice(
+        `If an account exists for ${normalizedEmail}, you'll receive a password reset email shortly. Check spam/promotions if it doesn't appear.`
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to send password reset email."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const displayError = error || authError;
 
   return (
@@ -78,6 +106,11 @@ const SignUp = () => {
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{displayError}</AlertDescription>
+                </Alert>
+              )}
+              {notice && (
+                <Alert>
+                  <AlertDescription>{notice}</AlertDescription>
                 </Alert>
               )}
               <div className="space-y-2">
@@ -105,7 +138,17 @@ const SignUp = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-sm text-primary hover:underline disabled:opacity-60"
+                    disabled={isLoading || loading}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
                 <div className="relative">
                   <Input
                     id="password"

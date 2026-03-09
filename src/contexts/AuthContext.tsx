@@ -303,11 +303,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       setError(null);
       const authInstance = getAuthInstance();
-      const actionCodeSettings = {
-        url: `${window.location.origin}/signin`,
-        handleCodeInApp: false,
-      };
-      await sendPasswordResetEmail(authInstance, email.trim(), actionCodeSettings);
+      await sendPasswordResetEmail(authInstance, email.trim().toLowerCase());
     } catch (err) {
       const errorMessage = getAuthErrorMessage(err, "Failed to send password reset email");
       setError(errorMessage);
