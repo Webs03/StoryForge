@@ -31,16 +31,18 @@ const GoogleIcon = () => (
 
 const SignIn = () => {
   const navigate = useNavigate();
-  const { signIn, signInWithGoogle, loading, error: authError } = useAuth();
+  const { signIn, signInWithGoogle, resetPassword, loading, error: authError } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string>("");
+  const [notice, setNotice] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setNotice("");
 
     // Validation
     if (!email.trim()) {
@@ -69,15 +71,42 @@ const SignIn = () => {
 
   const handleGoogleSignIn = async () => {
     setError("");
+    setNotice("");
     try {
       setIsLoading(true);
-      await signInWithGoogle();
-      navigate("/home");
+      const method = await signInWithGoogle();
+      if (method === "popup") {
+        navigate("/home");
+      }
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
           : "Failed to sign in with Google."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setError("");
+    setNotice("");
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      setError("Enter your email address first, then click Forgot password.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await resetPassword(normalizedEmail);
+      setNotice(`Password reset email sent to ${normalizedEmail}.`);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to send password reset email."
       );
     } finally {
       setIsLoading(false);
@@ -107,6 +136,11 @@ const SignIn = () => {
                   <AlertDescription>{displayError}</AlertDescription>
                 </Alert>
               )}
+              {notice && (
+                <Alert>
+                  <AlertDescription>{notice}</AlertDescription>
+                </Alert>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -122,9 +156,14 @@ const SignIn = () => {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
-                  <a href="#" className="text-sm text-primary hover:underline">
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-sm text-primary hover:underline disabled:opacity-60"
+                    disabled={isLoading || loading}
+                  >
                     Forgot password?
-                  </a>
+                  </button>
                 </div>
                 <div className="relative">
                   <Input

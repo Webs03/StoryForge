@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import LandingPage from "./pages/LandingPage";
+import HomeLandingPage from "./pages/HomeLandingPage";
 import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
 import Dashboard from "./pages/Dashboard";
@@ -25,7 +26,7 @@ const App = () => (
             path="/home"
             element={
               <ProtectedRoute>
-                <LandingPage />
+                <HomeLandingPage />
               </ProtectedRoute>
             }
           />

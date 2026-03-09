@@ -4,8 +4,10 @@ import {
   User,
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -41,6 +43,8 @@ const getAuthErrorMessage = (err: unknown, fallback: string) => {
       return "Invalid email or password. Please check your credentials and try again.";
     case "invalid-email":
       return "Invalid email address format.";
+    case "missing-email":
+      return "Please enter your email address first.";
     case "user-disabled":
       return "This account has been disabled. Contact support if this is unexpected.";
     case "email-already-in-use":
@@ -244,7 +248,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (): Promise<"popup" | "redirect"> => {
     try {
       setError(null);
       const authInstance = getAuthInstance();
@@ -264,8 +268,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       ).catch((err) => {
         console.error("Background profile sync failed after Google sign in:", err);
       });
+      return "popup";
     } catch (err) {
+      const code = getErrorCode(err);
+      if (code === "popup-blocked") {
+        try {
+          const authInstance = getAuthInstance();
+          const provider = new GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: "select_account" });
+          await signInWithRedirect(authInstance, provider);
+          return "redirect";
+        } catch (redirectErr) {
+          const redirectMessage = getAuthErrorMessage(
+            redirectErr,
+            "Failed to sign in with Google"
+          );
+          setError(redirectMessage);
+          throw new Error(redirectMessage);
+        }
+      }
       const errorMessage = getAuthErrorMessage(err, "Failed to sign in with Google");
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    try {
+      setError(null);
+      const authInstance = getAuthInstance();
+      await sendPasswordResetEmail(authInstance, email.trim());
+    } catch (err) {
+      const errorMessage = getAuthErrorMessage(err, "Failed to send password reset email");
       setError(errorMessage);
       throw new Error(errorMessage);
     }
@@ -293,6 +327,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     signUp,
     signIn,
     signInWithGoogle,
+    resetPassword,
     logOut,
     error,
   };
