@@ -21,6 +21,7 @@ import {
   getTrendingRecommendations,
   type TopicRecommendation,
 } from "@/lib/recommendations";
+import { buildReaderUrl } from "@/lib/reader-link";
 
 const coverImagePaths = {
   tellTaleHeart: "/covers/tell-tale-heart.svg",
@@ -150,6 +151,9 @@ const HomeLandingPage = () => {
     () =>
       recommendedTopics.slice(0, 6).map((topic, index) => ({
         title: topic.title,
+        format: topic.format,
+        href: topic.href,
+        source: topic.source,
         category: `${topic.format} · ${topic.source ?? "Live Source"}`,
         blurb: topic.description,
         imageSrc: topic.imageSrc || getGeneratedCover(topic.format, index + 1),
@@ -318,42 +322,52 @@ const HomeLandingPage = () => {
               </div>
             ) : (
               trendingNowItems.map((story, i) => (
-                <motion.a
+                <motion.div
                   key={story.title}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.5, delay: i * 0.08 }}
-                  className="rounded-xl overflow-hidden border border-border bg-background group hover:border-primary/30 transition-colors"
-                  href={story.href}
-                  target={story.href ? "_blank" : undefined}
-                  rel={story.href ? "noreferrer" : undefined}
                 >
-                  <div className="relative aspect-[3/4] overflow-hidden">
-                    <img
-                      src={getCoverSrc(story.title, story.imageSrc)}
-                      alt={story.title}
-                      loading="lazy"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={(event) => {
-                        event.currentTarget.onerror = null;
-                        event.currentTarget.src = onlineImageFallback;
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
-                    <div className="absolute left-4 right-4 bottom-4">
-                      <div className="inline-flex items-center gap-1.5 rounded-full bg-black/60 text-white/90 px-2.5 py-1 text-[11px] font-body mb-2">
-                        {story.format === "Playscript" ? <Theater className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
-                        {story.format}
+                  <Link
+                    to={buildReaderUrl({
+                      title: story.title,
+                      format: story.format,
+                      imageSrc: getCoverSrc(story.title, story.imageSrc),
+                      source: story.source,
+                      href: story.href,
+                      category: story.category,
+                      reads: story.reads,
+                      description: `${story.category} · ${story.reads}`,
+                    })}
+                    className="block rounded-xl overflow-hidden border border-border bg-background group hover:border-primary/30 transition-colors"
+                  >
+                    <div className="relative aspect-[3/4] overflow-hidden">
+                      <img
+                        src={getCoverSrc(story.title, story.imageSrc)}
+                        alt={story.title}
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = onlineImageFallback;
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+                      <div className="absolute left-4 right-4 bottom-4">
+                        <div className="inline-flex items-center gap-1.5 rounded-full bg-black/60 text-white/90 px-2.5 py-1 text-[11px] font-body mb-2">
+                          {story.format === "Playscript" ? <Theater className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
+                          {story.format}
+                        </div>
+                        <h3 className="font-display text-xl font-semibold text-white mb-1 leading-tight">{story.title}</h3>
+                        <p className="font-body text-xs text-white/80">
+                          {story.category} · {story.reads}
+                          {story.source ? ` · ${story.source}` : ""}
+                        </p>
                       </div>
-                      <h3 className="font-display text-xl font-semibold text-white mb-1 leading-tight">{story.title}</h3>
-                      <p className="font-body text-xs text-white/80">
-                        {story.category} · {story.reads}
-                        {story.source ? ` · ${story.source}` : ""}
-                      </p>
                     </div>
-                  </div>
-                </motion.a>
+                  </Link>
+                </motion.div>
               ))
             )}
           </div>
@@ -379,32 +393,44 @@ const HomeLandingPage = () => {
               </div>
             ) : (
               editorsPick.map((story, i) => (
-                <motion.article
+                <motion.div
                   key={story.title}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.5, delay: i * 0.1 }}
-                  className="bg-background rounded-xl border border-border overflow-hidden group hover:border-primary/30 transition-colors"
                 >
-                  <div className="aspect-[16/10] overflow-hidden">
-                    <img
-                      src={getCoverSrc(story.title, story.imageSrc)}
-                      alt={story.title}
-                      loading="lazy"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={(event) => {
-                        event.currentTarget.onerror = null;
-                        event.currentTarget.src = onlineImageFallback;
-                      }}
-                    />
-                  </div>
-                  <div className="p-5">
-                    <p className="font-body text-xs uppercase tracking-wide text-primary mb-2">{story.category}</p>
-                    <h4 className="font-display text-xl font-semibold text-foreground mb-2">{story.title}</h4>
-                    <p className="font-body text-sm text-muted-foreground leading-relaxed">{story.blurb}</p>
-                  </div>
-                </motion.article>
+                  <Link
+                    to={buildReaderUrl({
+                      title: story.title,
+                      format: story.format,
+                      imageSrc: getCoverSrc(story.title, story.imageSrc),
+                      source: story.source,
+                      href: story.href,
+                      category: story.category,
+                      description: story.blurb,
+                    })}
+                    className="block bg-background rounded-xl border border-border overflow-hidden group hover:border-primary/30 transition-colors"
+                  >
+                    <div className="aspect-[16/10] overflow-hidden">
+                      <img
+                        src={getCoverSrc(story.title, story.imageSrc)}
+                        alt={story.title}
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = onlineImageFallback;
+                        }}
+                      />
+                    </div>
+                    <div className="p-5">
+                      <p className="font-body text-xs uppercase tracking-wide text-primary mb-2">{story.category}</p>
+                      <h4 className="font-display text-xl font-semibold text-foreground mb-2">{story.title}</h4>
+                      <p className="font-body text-sm text-muted-foreground leading-relaxed">{story.blurb}</p>
+                    </div>
+                  </Link>
+                </motion.div>
               ))
             )}
           </div>
@@ -429,11 +455,18 @@ const HomeLandingPage = () => {
                   </p>
                 ) : (
                   mostReadItems.map((story, index) => (
-                    <a
+                    <Link
                       key={`most-read-${story.title}`}
-                      href={story.href}
-                      target={story.href ? "_blank" : undefined}
-                      rel={story.href ? "noreferrer" : undefined}
+                      to={buildReaderUrl({
+                        title: story.title,
+                        format: story.format,
+                        imageSrc: getCoverSrc(story.title, story.imageSrc),
+                        source: story.source,
+                        href: story.href,
+                        category: story.category,
+                        reads: `${story.estimatedReads.toLocaleString()} reads`,
+                        description: `${story.category} · ${story.reads}`,
+                      })}
                       className="flex items-center gap-3 rounded-lg border border-border p-2.5 hover:border-primary/40 transition-colors"
                     >
                       <span className="w-6 text-center font-display text-lg text-primary">{index + 1}</span>
@@ -456,7 +489,7 @@ const HomeLandingPage = () => {
                       <span className="ml-auto font-body text-xs text-muted-foreground whitespace-nowrap">
                         {story.estimatedReads.toLocaleString()} reads
                       </span>
-                    </a>
+                    </Link>
                   ))
                 )}
               </div>
@@ -481,11 +514,18 @@ const HomeLandingPage = () => {
                   </p>
                 ) : (
                   mostLikedItems.map((story, index) => (
-                    <a
+                    <Link
                       key={`most-liked-${story.title}`}
-                      href={story.href}
-                      target={story.href ? "_blank" : undefined}
-                      rel={story.href ? "noreferrer" : undefined}
+                      to={buildReaderUrl({
+                        title: story.title,
+                        format: story.format,
+                        imageSrc: getCoverSrc(story.title, story.imageSrc),
+                        source: story.source,
+                        href: story.href,
+                        category: story.category,
+                        reads: `${story.estimatedLikes.toLocaleString()} likes`,
+                        description: `${story.category} · ${story.reads}`,
+                      })}
                       className="flex items-center gap-3 rounded-lg border border-border p-2.5 hover:border-primary/40 transition-colors"
                     >
                       <span className="w-6 text-center font-display text-lg text-primary">{index + 1}</span>
@@ -508,7 +548,7 @@ const HomeLandingPage = () => {
                       <span className="ml-auto font-body text-xs text-muted-foreground whitespace-nowrap">
                         {story.estimatedLikes.toLocaleString()} likes
                       </span>
-                    </a>
+                    </Link>
                   ))
                 )}
               </div>
@@ -586,35 +626,46 @@ const HomeLandingPage = () => {
               </div>
             ) : (
               recommendedTopics.map((topic, i) => (
-                <motion.article
+                <motion.div
                   key={topic.title}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.5, delay: i * 0.1 }}
-                  className="bg-card rounded-xl border border-border overflow-hidden group hover:border-primary/30 transition-colors"
                 >
-                  <div className="aspect-[16/10] overflow-hidden">
-                    <img
-                      src={getCoverSrc(topic.title, topic.imageSrc)}
-                      alt={topic.title}
-                      loading="lazy"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={(event) => {
-                        event.currentTarget.onerror = null;
-                        event.currentTarget.src = onlineImageFallback;
-                      }}
-                    />
-                  </div>
-                  <div className="p-6">
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 mb-3">
-                      {topic.format === "Playscript" ? <Theater className="h-3 w-3 text-primary" /> : <FileText className="h-3 w-3 text-primary" />}
-                      <span className="font-body text-[11px] uppercase tracking-wide text-primary">{topic.format}</span>
+                  <Link
+                    to={buildReaderUrl({
+                      title: topic.title,
+                      format: topic.format,
+                      imageSrc: getCoverSrc(topic.title, topic.imageSrc),
+                      source: topic.source,
+                      href: topic.href,
+                      description: topic.description,
+                    })}
+                    className="block bg-card rounded-xl border border-border overflow-hidden group hover:border-primary/30 transition-colors"
+                  >
+                    <div className="aspect-[16/10] overflow-hidden">
+                      <img
+                        src={getCoverSrc(topic.title, topic.imageSrc)}
+                        alt={topic.title}
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = onlineImageFallback;
+                        }}
+                      />
                     </div>
-                    <h3 className="font-display text-xl font-semibold text-foreground mb-2">{topic.title}</h3>
-                    <p className="font-body text-muted-foreground leading-relaxed">{topic.description}</p>
-                  </div>
-                </motion.article>
+                    <div className="p-6">
+                      <div className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 mb-3">
+                        {topic.format === "Playscript" ? <Theater className="h-3 w-3 text-primary" /> : <FileText className="h-3 w-3 text-primary" />}
+                        <span className="font-body text-[11px] uppercase tracking-wide text-primary">{topic.format}</span>
+                      </div>
+                      <h3 className="font-display text-xl font-semibold text-foreground mb-2">{topic.title}</h3>
+                      <p className="font-body text-muted-foreground leading-relaxed">{topic.description}</p>
+                    </div>
+                  </Link>
+                </motion.div>
               ))
             )}
           </div>
