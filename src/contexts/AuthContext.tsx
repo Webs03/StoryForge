@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import type { FirebaseError } from "firebase/app";
 import {
   User,
+  type ActionCodeSettings,
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -69,6 +70,28 @@ const getAuthErrorMessage = (err: unknown, fallback: string) => {
       return "Network error during sign in. Please try again.";
     case "too-many-requests":
       return "Too many sign-in attempts. Please try again in a few minutes.";
+    default:
+      return err instanceof Error ? err.message : fallback;
+  }
+};
+
+const getPasswordResetErrorMessage = (err: unknown, fallback: string) => {
+  const code = getErrorCode(err);
+  switch (code) {
+    case "invalid-email":
+      return "Please enter a valid email address.";
+    case "missing-email":
+      return "Please enter your email address first.";
+    case "too-many-requests":
+      return "Too many reset attempts. Please wait a few minutes and try again.";
+    case "network-request-failed":
+      return "Network error while sending reset email. Check your connection and try again.";
+    case "operation-not-allowed":
+      return "Email/password sign-in is disabled in Firebase Authentication.";
+    case "unauthorized-continue-uri":
+      return "Password reset redirect domain is not authorized in Firebase Authentication.";
+    case "invalid-continue-uri":
+      return "Password reset redirect URL is invalid. Check your app configuration.";
     default:
       return err instanceof Error ? err.message : fallback;
   }
@@ -303,9 +326,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       setError(null);
       const authInstance = getAuthInstance();
-      await sendPasswordResetEmail(authInstance, email.trim().toLowerCase());
+      const normalizedEmail = email.trim().toLowerCase();
+      const continueUrl =
+        import.meta.env.VITE_PASSWORD_RESET_CONTINUE_URL?.trim() ||
+        `${window.location.origin}/signin`;
+
+      const actionCodeSettings: ActionCodeSettings = {
+        url: continueUrl,
+        handleCodeInApp: false,
+      };
+
+      try {
+        await sendPasswordResetEmail(authInstance, normalizedEmail, actionCodeSettings);
+      } catch (firstErr) {
+        const code = getErrorCode(firstErr);
+
+        // Retry without redirect settings in case current origin is not yet authorized.
+        if (
+          code === "unauthorized-continue-uri" ||
+          code === "invalid-continue-uri" ||
+          code === "missing-continue-uri"
+        ) {
+          await sendPasswordResetEmail(authInstance, normalizedEmail);
+        } else {
+          throw firstErr;
+        }
+      }
     } catch (err) {
-      const errorMessage = getAuthErrorMessage(err, "Failed to send password reset email");
+      const errorMessage = getPasswordResetErrorMessage(
+        err,
+        "Failed to send password reset email"
+      );
       setError(errorMessage);
       throw new Error(errorMessage);
     }
