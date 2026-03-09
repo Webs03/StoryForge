@@ -107,6 +107,8 @@ const getGeneratedCover = (format: CoverFormat, index: number) => {
   return coverSet[index % coverSet.length] ?? onlineImageFallback;
 };
 
+const LIVE_TRENDING_REFRESH_MS = 90_000;
+
 const getInitials = (name: string, email: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
@@ -166,11 +168,7 @@ const HomeLandingPage = () => {
 
   useEffect(() => {
     let cancelled = false;
-
-    const loadTrending = async () => {
-      const result = await getTrendingRecommendations({ limit: 8 });
-      if (cancelled) return;
-
+    const applyTrendingResult = (result: Awaited<ReturnType<typeof getTrendingRecommendations>>) => {
       if (result.items.length > 0) {
         setTrendingItems(
           result.items.map((item, index) => ({
@@ -188,9 +186,30 @@ const HomeLandingPage = () => {
       setTrendingUpdatedAt(null);
     };
 
+    const refreshLiveTrending = async () => {
+      const liveResult = await getTrendingRecommendations({ limit: 8, forceLive: true });
+      if (cancelled) return;
+      applyTrendingResult(liveResult);
+    };
+
+    const loadTrending = async () => {
+      const initialResult = await getTrendingRecommendations({ limit: 8 });
+      if (cancelled) return;
+      applyTrendingResult(initialResult);
+
+      if (initialResult.source !== "live") {
+        await refreshLiveTrending();
+      }
+    };
+
     void loadTrending();
+    const intervalId = window.setInterval(() => {
+      void refreshLiveTrending();
+    }, LIVE_TRENDING_REFRESH_MS);
+
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
   }, []);
 

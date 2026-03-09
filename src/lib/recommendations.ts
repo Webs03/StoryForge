@@ -387,16 +387,19 @@ const fetchGutendexTrendingItems = async (subject: string) => {
 };
 
 export const getTrendingRecommendations = async (
-  options?: { limit?: number }
+  options?: { limit?: number; forceLive?: boolean }
 ): Promise<RecommendationFetchResult<TrendingRecommendation>> => {
   const limit = options?.limit ?? 8;
-  const freshCache = readCache<TrendingRecommendation[]>(TRENDING_CACHE_KEY);
-  if (freshCache && freshCache.payload.length > 0) {
-    return {
-      items: freshCache.payload.slice(0, limit),
-      source: "cache",
-      updatedAt: freshCache.updatedAt,
-    };
+  const forceLive = options?.forceLive === true;
+  if (!forceLive) {
+    const freshCache = readCache<TrendingRecommendation[]>(TRENDING_CACHE_KEY);
+    if (freshCache && freshCache.payload.length > 0) {
+      return {
+        items: freshCache.payload.slice(0, limit),
+        source: "cache",
+        updatedAt: freshCache.updatedAt,
+      };
+    }
   }
 
   const sources: Array<{ path: string; format: RecommendationFormat }> = [
@@ -628,18 +631,22 @@ export const getTopicsForYouRecommendations = async (options: {
   genres: string[];
   recentTitles: string[];
   limit?: number;
+  forceLive?: boolean;
 }): Promise<RecommendationFetchResult<TopicRecommendation>> => {
   const limit = options.limit ?? 6;
   const subjects = inferSubjects(options.genres, options.recentTitles);
   const cacheKey = `sf:recommendations:topics:v1:${options.userId}:${subjects.join(",")}`;
+  const forceLive = options.forceLive === true;
 
-  const freshCache = readCache<TopicRecommendation[]>(cacheKey);
-  if (freshCache && freshCache.payload.length > 0) {
-    return {
-      items: freshCache.payload.slice(0, limit),
-      source: "cache",
-      updatedAt: freshCache.updatedAt,
-    };
+  if (!forceLive) {
+    const freshCache = readCache<TopicRecommendation[]>(cacheKey);
+    if (freshCache && freshCache.payload.length > 0) {
+      return {
+        items: freshCache.payload.slice(0, limit),
+        source: "cache",
+        updatedAt: freshCache.updatedAt,
+      };
+    }
   }
 
   const topSubjects = subjects.slice(0, 3);

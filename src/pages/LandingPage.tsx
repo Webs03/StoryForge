@@ -97,6 +97,8 @@ const getGeneratedCover = (format: CoverFormat, index: number) => {
   return coverSet[index % coverSet.length] ?? onlineImageFallback;
 };
 
+const LIVE_TRENDING_REFRESH_MS = 90_000;
+
 const LandingPage = () => {
   const [trendingItems, setTrendingItems] = useState<TrendingItem[]>([]);
   const [trendingState, setTrendingState] = useState<"loading" | "live" | "cache" | "fallback">(
@@ -129,11 +131,7 @@ const LandingPage = () => {
 
   useEffect(() => {
     let cancelled = false;
-
-    const loadTrending = async () => {
-      const result = await getTrendingRecommendations({ limit: 8 });
-      if (cancelled) return;
-
+    const applyTrendingResult = (result: Awaited<ReturnType<typeof getTrendingRecommendations>>) => {
       if (result.items.length > 0) {
         setTrendingItems(
           result.items.map((item, index) => ({
@@ -151,9 +149,30 @@ const LandingPage = () => {
       setTrendingUpdatedAt(null);
     };
 
+    const refreshLiveTrending = async () => {
+      const liveResult = await getTrendingRecommendations({ limit: 8, forceLive: true });
+      if (cancelled) return;
+      applyTrendingResult(liveResult);
+    };
+
+    const loadTrending = async () => {
+      const initialResult = await getTrendingRecommendations({ limit: 8 });
+      if (cancelled) return;
+      applyTrendingResult(initialResult);
+
+      if (initialResult.source !== "live") {
+        await refreshLiveTrending();
+      }
+    };
+
     void loadTrending();
+    const intervalId = window.setInterval(() => {
+      void refreshLiveTrending();
+    }, LIVE_TRENDING_REFRESH_MS);
+
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
   }, []);
 
