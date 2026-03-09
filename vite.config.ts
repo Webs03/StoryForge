@@ -7,7 +7,29 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    allowedHosts: true
+    allowedHosts: true,
+    proxy: {
+      "/api/reddit": {
+        target: "https://www.reddit.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/reddit/, ""),
+      },
+      "/api/openlibrary": {
+        target: "https://openlibrary.org",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/openlibrary/, ""),
+      },
+      "/api/googlebooks": {
+        target: "https://www.googleapis.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/googlebooks/, ""),
+      },
+      "/api/gutendex": {
+        target: "https://gutendex.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/gutendex/, ""),
+      },
+    }
   },
   plugins: [react()].filter(Boolean),
   resolve: {

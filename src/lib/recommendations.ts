@@ -145,6 +145,17 @@ type GoogleBooksResponse = {
   }>;
 };
 
+type GutendexResponse = {
+  results?: Array<{
+    id?: number;
+    title?: string;
+    subjects?: string[];
+    authors?: Array<{ name?: string }>;
+    formats?: Record<string, string>;
+    download_count?: number;
+  }>;
+};
+
 const isBrowser = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 
 const readCache = <T>(key: string, options?: { allowExpired?: boolean }): CacheEnvelope<T> | null => {
@@ -179,6 +190,26 @@ const writeCache = <T>(key: string, payload: T, ttlMs: number) => {
     window.localStorage.setItem(key, JSON.stringify(envelope));
   } catch {
     // no-op: cache storage should not break recommendation rendering
+  }
+};
+
+type ExternalApiProvider = "reddit" | "openlibrary" | "googlebooks" | "gutendex";
+
+const buildExternalApiUrl = (provider: ExternalApiProvider, pathAndQuery: string) => {
+  const normalizedPath = pathAndQuery.startsWith("/") ? pathAndQuery : `/${pathAndQuery}`;
+  if (import.meta.env.DEV) {
+    return `/api/${provider}${normalizedPath}`;
+  }
+
+  switch (provider) {
+    case "reddit":
+      return `https://www.reddit.com${normalizedPath}`;
+    case "openlibrary":
+      return `https://openlibrary.org${normalizedPath}`;
+    case "googlebooks":
+      return `https://www.googleapis.com${normalizedPath}`;
+    case "gutendex":
+      return `https://gutendex.com${normalizedPath}`;
   }
 };
 
@@ -243,6 +274,116 @@ const inferSubjects = (genres: string[], recentTitles: string[]) => {
   return [...new Set([...ranked, ...DEFAULT_TOPICS])].slice(0, 5);
 };
 
+const TRENDING_SUPPLEMENTAL_SUBJECTS = [
+  "fiction",
+  "drama",
+  "mystery_and_detective_stories",
+] as const;
+
+const fetchOpenLibraryTrendingItems = async (subject: string) => {
+  const payload = await fetchJsonWithTimeout<OpenLibrarySubjectsResponse>(
+    buildExternalApiUrl("openlibrary", `/subjects/${subject}.json?limit=12`),
+    6500
+  );
+  const works = payload?.works ?? [];
+  const label = subjectToLabel(subject);
+
+  return works.map((work) => {
+    const title = typeof work.title === "string" ? work.title.trim() : "";
+    if (!title) return null;
+
+    const author = work.authors?.[0]?.name ?? "Unknown Author";
+    const editionCount = typeof work.edition_count === "number" ? work.edition_count : 0;
+    const hint = `${title} ${author} ${(work.subject ?? []).join(" ")} ${subject}`;
+
+    return {
+      title,
+      category: label,
+      format: inferFormat(hint),
+      reads: editionCount > 0 ? `${editionCount.toLocaleString()} editions` : "Recommended",
+      imageSrc:
+        typeof work.cover_id === "number"
+          ? `https://covers.openlibrary.org/b/id/${work.cover_id}-L.jpg`
+          : FALLBACK_IMAGE,
+      href: typeof work.key === "string" ? `https://openlibrary.org${work.key}` : undefined,
+      score: 20 + editionCount * 1.3,
+      source: "Open Library",
+    } satisfies TrendingRecommendation;
+  });
+};
+
+const fetchGoogleBooksTrendingItems = async (subject: string) => {
+  const payload = await fetchJsonWithTimeout<GoogleBooksResponse>(
+    buildExternalApiUrl("googlebooks", `/books/v1/volumes?q=subject:${encodeURIComponent(
+      subject.replace(/_/g, " ")
+    )}&maxResults=10&printType=books&orderBy=relevance`),
+    7000
+  );
+  const items = payload?.items ?? [];
+  const label = subjectToLabel(subject);
+
+  return items.map((entry) => {
+    const volumeInfo = entry.volumeInfo;
+    const title = volumeInfo?.title?.trim() ?? "";
+    if (!title) return null;
+
+    const author = volumeInfo?.authors?.[0] ?? "Unknown Author";
+    const categories = volumeInfo?.categories?.join(" ") ?? "";
+    const ratingsCount = typeof volumeInfo?.ratingsCount === "number" ? volumeInfo.ratingsCount : 0;
+    const averageRating =
+      typeof volumeInfo?.averageRating === "number" ? volumeInfo.averageRating : 0;
+
+    return {
+      title,
+      category: volumeInfo?.categories?.[0] ?? label,
+      format: inferFormat(`${title} ${categories}`),
+      reads: ratingsCount > 0 ? `${ratingsCount.toLocaleString()} ratings` : "Recommended",
+      imageSrc:
+        volumeInfo?.imageLinks?.thumbnail?.replace("http://", "https://") ??
+        volumeInfo?.imageLinks?.smallThumbnail?.replace("http://", "https://") ??
+        FALLBACK_IMAGE,
+      href: volumeInfo?.infoLink,
+      score: 14 + ratingsCount * 0.2 + averageRating * 7,
+      source: "Google Books",
+    } satisfies TrendingRecommendation;
+  });
+};
+
+const fetchGutendexTrendingItems = async (subject: string) => {
+  const payload = await fetchJsonWithTimeout<GutendexResponse>(
+    buildExternalApiUrl("gutendex", `/books?search=${encodeURIComponent(
+      subject.replace(/_/g, " ")
+    )}&languages=en`),
+    7000
+  );
+  const items = payload?.results ?? [];
+  const label = subjectToLabel(subject);
+
+  return items.slice(0, 10).map((entry) => {
+    const title = typeof entry.title === "string" ? entry.title.trim() : "";
+    if (!title) return null;
+
+    const author = entry.authors?.[0]?.name ?? "Unknown Author";
+    const downloads = typeof entry.download_count === "number" ? entry.download_count : 0;
+    const hint = `${title} ${author} ${(entry.subjects ?? []).join(" ")} ${subject}`;
+
+    return {
+      title,
+      category: label,
+      format: inferFormat(hint),
+      reads: downloads > 0 ? `${downloads.toLocaleString()} downloads` : "Trending",
+      imageSrc:
+        typeof entry.formats?.["image/jpeg"] === "string"
+          ? entry.formats["image/jpeg"]
+          : FALLBACK_IMAGE,
+      href:
+        typeof entry.id === "number" ? `https://www.gutenberg.org/ebooks/${entry.id}` : undefined,
+      score: 12 + downloads * 0.03,
+      source: "Gutendex",
+    } satisfies TrendingRecommendation;
+  });
+};
+
 export const getTrendingRecommendations = async (
   options?: { limit?: number }
 ): Promise<RecommendationFetchResult<TrendingRecommendation>> => {
@@ -256,15 +397,18 @@ export const getTrendingRecommendations = async (
     };
   }
 
-  const sources: Array<{ url: string; format: RecommendationFormat }> = [
-    { url: "https://www.reddit.com/r/WritingPrompts/top.json?t=day&limit=12", format: "Story" },
-    { url: "https://www.reddit.com/r/shortstories/top.json?t=day&limit=12", format: "Story" },
-    { url: "https://www.reddit.com/r/Screenwriting/top.json?t=day&limit=12", format: "Playscript" },
+  const sources: Array<{ path: string; format: RecommendationFormat }> = [
+    { path: "/r/WritingPrompts/top.json?t=day&limit=12", format: "Story" },
+    { path: "/r/shortstories/top.json?t=day&limit=12", format: "Story" },
+    { path: "/r/Screenwriting/top.json?t=day&limit=12", format: "Playscript" },
   ];
 
   const responses = await Promise.all(
     sources.map(async (source) => {
-      const payload = await fetchJsonWithTimeout<RedditListingResponse>(source.url, 6000);
+      const payload = await fetchJsonWithTimeout<RedditListingResponse>(
+        buildExternalApiUrl("reddit", source.path),
+        6000
+      );
       const children = payload?.data?.children ?? [];
       return children.map((entry) => ({ source, post: entry.data ?? {} }));
     })
@@ -315,10 +459,41 @@ export const getTrendingRecommendations = async (
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     .slice(0, limit);
 
-  if (mapped.length > 0) {
-    writeCache(TRENDING_CACHE_KEY, mapped, TRENDING_TTL_MS);
+  const combinedByTitle = new Map<string, TrendingRecommendation>();
+  for (const item of mapped) {
+    combinedByTitle.set(normalizeTitle(item.title), item);
+  }
+
+  if (combinedByTitle.size < limit) {
+    const [openLibrarySets, googleBooksSets, gutendexSets] = await Promise.all([
+      Promise.all(TRENDING_SUPPLEMENTAL_SUBJECTS.map((subject) => fetchOpenLibraryTrendingItems(subject))),
+      Promise.all(TRENDING_SUPPLEMENTAL_SUBJECTS.map((subject) => fetchGoogleBooksTrendingItems(subject))),
+      Promise.all(TRENDING_SUPPLEMENTAL_SUBJECTS.map((subject) => fetchGutendexTrendingItems(subject))),
+    ]);
+
+    const supplemental = [
+      ...openLibrarySets.flat(),
+      ...googleBooksSets.flat(),
+      ...gutendexSets.flat(),
+    ].filter((item): item is TrendingRecommendation => item !== null);
+
+    for (const item of supplemental) {
+      const key = normalizeTitle(item.title);
+      const existing = combinedByTitle.get(key);
+      if (!existing || (item.score ?? 0) > (existing.score ?? 0)) {
+        combinedByTitle.set(key, item);
+      }
+    }
+  }
+
+  const ranked = [...combinedByTitle.values()]
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, limit);
+
+  if (ranked.length > 0) {
+    writeCache(TRENDING_CACHE_KEY, ranked, TRENDING_TTL_MS);
     return {
-      items: mapped,
+      items: ranked,
       source: "live",
       updatedAt: new Date().toISOString(),
     };
@@ -342,7 +517,7 @@ export const getTrendingRecommendations = async (
 
 const fetchOpenLibraryTopicItems = async (subject: string) => {
   const payload = await fetchJsonWithTimeout<OpenLibrarySubjectsResponse>(
-    `https://openlibrary.org/subjects/${subject}.json?limit=12`,
+    buildExternalApiUrl("openlibrary", `/subjects/${subject}.json?limit=12`),
     6500
   );
   const works = payload?.works ?? [];
@@ -373,9 +548,9 @@ const fetchOpenLibraryTopicItems = async (subject: string) => {
 
 const fetchGoogleBooksTopicItems = async (subject: string) => {
   const payload = await fetchJsonWithTimeout<GoogleBooksResponse>(
-    `https://www.googleapis.com/books/v1/volumes?q=subject:${encodeURIComponent(
+    buildExternalApiUrl("googlebooks", `/books/v1/volumes?q=subject:${encodeURIComponent(
       subject.replace(/_/g, " ")
-    )}&maxResults=10&printType=books&orderBy=relevance`,
+    )}&maxResults=10&printType=books&orderBy=relevance`),
     7000
   );
   const items = payload?.items ?? [];
@@ -411,6 +586,41 @@ const fetchGoogleBooksTopicItems = async (subject: string) => {
   });
 };
 
+const fetchGutendexTopicItems = async (subject: string) => {
+  const payload = await fetchJsonWithTimeout<GutendexResponse>(
+    buildExternalApiUrl("gutendex", `/books?search=${encodeURIComponent(
+      subject.replace(/_/g, " ")
+    )}&languages=en`),
+    7000
+  );
+  const items = payload?.results ?? [];
+  const label = subjectToLabel(subject);
+
+  return items.slice(0, 10).map((entry) => {
+    const title = typeof entry.title === "string" ? entry.title.trim() : "";
+    if (!title) return null;
+
+    const author = entry.authors?.[0]?.name ?? "Unknown Author";
+    const hint = `${title} ${author} ${(entry.subjects ?? []).join(" ")}`;
+    const imageSrc =
+      typeof entry.formats?.["image/jpeg"] === "string"
+        ? entry.formats["image/jpeg"]
+        : FALLBACK_IMAGE;
+    const downloads = typeof entry.download_count === "number" ? entry.download_count : 0;
+
+    return {
+      title,
+      format: inferFormat(hint),
+      description: `${label} pick · ${author}`,
+      imageSrc,
+      href:
+        typeof entry.id === "number" ? `https://www.gutenberg.org/ebooks/${entry.id}` : undefined,
+      score: 10 + downloads * 0.02,
+      source: "Gutendex",
+    } satisfies TopicRecommendation;
+  });
+};
+
 export const getTopicsForYouRecommendations = async (options: {
   userId: string;
   genres: string[];
@@ -431,12 +641,13 @@ export const getTopicsForYouRecommendations = async (options: {
   }
 
   const topSubjects = subjects.slice(0, 3);
-  const [openLibrarySets, googleBooksSets] = await Promise.all([
+  const [openLibrarySets, googleBooksSets, gutendexSets] = await Promise.all([
     Promise.all(topSubjects.map((subject) => fetchOpenLibraryTopicItems(subject))),
     Promise.all(topSubjects.map((subject) => fetchGoogleBooksTopicItems(subject))),
+    Promise.all(topSubjects.map((subject) => fetchGutendexTopicItems(subject))),
   ]);
 
-  const merged = [...openLibrarySets.flat(), ...googleBooksSets.flat()].filter(
+  const merged = [...openLibrarySets.flat(), ...googleBooksSets.flat(), ...gutendexSets.flat()].filter(
     (item): item is TopicRecommendation => item !== null
   );
 

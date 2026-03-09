@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -13,6 +13,13 @@ import {
   FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  getTopicsForYouRecommendations,
+  getTrendingRecommendations,
+  type RecommendationFormat,
+  type TopicRecommendation,
+  type TrendingRecommendation,
+} from "@/lib/recommendations";
 import heroImage from "@/assets/hero-image.jpg";
 
 const coverImagePaths = {
@@ -62,50 +69,8 @@ const features = [
   },
 ];
 
-type CoverFormat = "Story" | "Playscript";
-
-type TrendingItem = {
-  title: string;
-  category: string;
-  format: CoverFormat;
-  reads: string;
-  imageSrc: string;
-  href?: string;
-  score?: number;
-  source?: string;
-};
-
-type OpenLibrarySearchResponse = {
-  docs?: Array<{
-    cover_i?: number;
-  }>;
-};
-
-const fetchOpenLibraryCover = async (title: string, author: string) => {
-  const params = new URLSearchParams({
-    title,
-    author,
-    fields: "cover_i",
-    limit: "1",
-  });
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 4500);
-  try {
-    const response = await fetch(`https://openlibrary.org/search.json?${params.toString()}`, {
-      signal: controller.signal,
-    });
-    if (!response.ok) return null;
-    const payload = (await response.json()) as OpenLibrarySearchResponse;
-    const coverId = payload.docs?.[0]?.cover_i;
-    if (typeof coverId !== "number") return null;
-    return `https://covers.openlibrary.org/b/id/${coverId}-L.jpg`;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-};
+type CoverFormat = RecommendationFormat;
+type TrendingItem = TrendingRecommendation;
 
 const onlineImageFallback = coverImagePaths.fallback;
 
@@ -130,253 +95,58 @@ const getGeneratedCover = (format: CoverFormat, index: number) => {
   return coverSet[index % coverSet.length] ?? onlineImageFallback;
 };
 
-const buildOpenLibrarySearchHref = (title: string, author: string) =>
-  `https://openlibrary.org/search?${new URLSearchParams({
-    title,
-    author,
-  }).toString()}`;
-
-type FamiliarWork = {
-  title: string;
-  author: string;
-  format: CoverFormat;
-  topicDescription: string;
-  editorBlurb: string;
-  searchTitle?: string;
-};
-
-const familiarWorks: FamiliarWork[] = [
-  {
-    title: "The Strange Case of Dr. Jekyll and Mr. Hyde",
-    author: "Robert Louis Stevenson",
-    format: "Story",
-    topicDescription: "A gothic classic on identity, secrecy, and the dual nature of human character.",
-    editorBlurb: "Stevenson's novella remains a key reference for psychological conflict in fiction.",
-  },
-  {
-    title: "Macbeth",
-    author: "William Shakespeare",
-    format: "Playscript",
-    topicDescription: "A powerful tragedy about ambition, guilt, and the cost of unchecked desire.",
-    editorBlurb: "A cornerstone of dramatic structure with memorable conflict and language.",
-  },
-  {
-    title: "The Crucible",
-    author: "Arthur Miller",
-    format: "Playscript",
-    topicDescription: "A tense play that explores fear, accusation, and moral courage under pressure.",
-    editorBlurb: "Miller's script remains one of the strongest examples of social drama on stage.",
-  },
-  {
-    title: "Romeo & Juliet",
-    author: "William Shakespeare",
-    format: "Playscript",
-    topicDescription: "A timeless tragedy of young love, family conflict, and fate.",
-    editorBlurb: "A defining romantic tragedy with enduring influence in theater and literature.",
-    searchTitle: "Romeo and Juliet",
-  },
-  {
-    title: "If Anything Happens I Love You",
-    author: "Will McCormack and Michael Govier",
-    format: "Playscript",
-    topicDescription: "A short-form dramatic narrative known for emotional pacing and visual storytelling.",
-    editorBlurb: "A modern short-film script example with concise structure and emotional impact.",
-  },
-  {
-    title: "Frankenstein",
-    author: "Mary Shelley",
-    format: "Story",
-    topicDescription: "A foundational novel of science fiction, ethics, and human responsibility.",
-    editorBlurb: "Shelley's novel blends horror and philosophy with lasting literary relevance.",
-  },
-  {
-    title: "Beowulf",
-    author: "Anonymous (Old English epic)",
-    format: "Story",
-    topicDescription: "An epic poem of heroism, legacy, and mortality across generations.",
-    editorBlurb: "A classic epic that still informs heroic storytelling and mythic narrative arcs.",
-  },
-  {
-    title: "Emma",
-    author: "Jane Austen",
-    format: "Story",
-    topicDescription: "A sharp social novel about self-awareness, class, and relationships.",
-    editorBlurb: "Austen's character-driven prose is a model for subtle irony and voice.",
-  },
-  {
-    title: "Pride & Prejudice",
-    author: "Jane Austen",
-    format: "Story",
-    topicDescription: "A beloved novel of wit, social expectation, and personal growth.",
-    editorBlurb: "Austen's dialogue and character arcs make this a benchmark for classic romance.",
-    searchTitle: "Pride and Prejudice",
-  },
-  {
-    title: "I Know Why the Caged Bird Sings",
-    author: "Maya Angelou",
-    format: "Story",
-    topicDescription: "A powerful autobiographical work on resilience, identity, and voice.",
-    editorBlurb: "Angelou's memoir is admired for emotional honesty and lyrical narrative strength.",
-  },
-  {
-    title: "Sense & Sensibility",
-    author: "Jane Austen",
-    format: "Story",
-    topicDescription: "A classic exploration of reason, emotion, and family expectations.",
-    editorBlurb: "Austen balances social commentary and character growth with precise prose.",
-    searchTitle: "Sense and Sensibility",
-  },
-  {
-    title: "Paradise Lost",
-    author: "John Milton",
-    format: "Story",
-    topicDescription: "An epic poem of rebellion, free will, and moral consequence.",
-    editorBlurb: "Milton's scope and poetic ambition make it a landmark in English literature.",
-  },
-  {
-    title: "Wuthering Heights",
-    author: "Emily Bronte",
-    format: "Story",
-    topicDescription: "A dark romantic novel centered on obsession, memory, and revenge.",
-    editorBlurb: "Bronte's intense tone and layered narration keep this work continually discussed.",
-  },
-  {
-    title: "Wait Till Helen Comes",
-    author: "Mary Downing Hahn",
-    format: "Story",
-    topicDescription: "A well-known ghost story blending family tension and supernatural mystery.",
-    editorBlurb: "A strong middle-grade horror example with accessible pacing and atmosphere.",
-  },
-];
-
-const topicsForYouWorks: FamiliarWork[] = [
-  familiarWorks[0], // Dr. Jekyll and Mr. Hyde
-  familiarWorks[5], // Frankenstein
-  familiarWorks[8], // Pride & Prejudice
-  familiarWorks[9], // I Know Why the Caged Bird Sings
-  familiarWorks[1], // Macbeth
-  familiarWorks[2], // The Crucible
-];
-
-const editorsPickWorks: FamiliarWork[] = [
-  {
-    title: "Othello",
-    author: "William Shakespeare",
-    format: "Playscript",
-    topicDescription: "A classic tragedy of trust, jealousy, and manipulation.",
-    editorBlurb: "Shakespeare's dramatic tension and character psychology remain stage essentials.",
-  },
-  {
-    title: "King Lear",
-    author: "William Shakespeare",
-    format: "Playscript",
-    topicDescription: "A major tragedy on power, family loyalty, and human frailty.",
-    editorBlurb: "A masterclass in tragic structure, emotional scale, and dramatic language.",
-  },
-  {
-    title: "All My Sons",
-    author: "Arthur Miller",
-    format: "Playscript",
-    topicDescription: "A post-war family drama about responsibility, denial, and consequence.",
-    editorBlurb: "Miller's tightly built script is an excellent reference for modern realistic theater.",
-  },
-  {
-    title: "Persuasion",
-    author: "Jane Austen",
-    format: "Story",
-    topicDescription: "A mature Austen novel centered on regret, second chances, and social pressure.",
-    editorBlurb: "Austen's late style offers quiet emotional depth and precise character movement.",
-  },
-  {
-    title: "Treasure Island",
-    author: "Robert Louis Stevenson",
-    format: "Story",
-    topicDescription: "A foundational adventure novel known for momentum, atmosphere, and voice.",
-    editorBlurb: "Stevenson's pacing and scene-building make this a lasting adventure benchmark.",
-  },
-  {
-    title: "Northanger Abbey",
-    author: "Jane Austen",
-    format: "Story",
-    topicDescription: "A witty social satire that playfully critiques gothic fiction conventions.",
-    editorBlurb: "Austen blends parody and character growth with clean, readable prose craft.",
-  },
-];
-
-const coverLookupTargets = Array.from(
-  new Map(
-    [...familiarWorks, ...topicsForYouWorks, ...editorsPickWorks].map((work) => [
-      work.title,
-      {
-        title: work.title,
-        author: work.author,
-        searchTitle: work.searchTitle ?? work.title,
-      },
-    ])
-  ).values()
-);
-
-const recommendedTopics = topicsForYouWorks.slice(0, 6).map((work, index) => ({
-  title: work.title,
-  format: work.format,
-  description: work.topicDescription,
-  imageSrc: getGeneratedCover(work.format, index),
-}));
-
-const fallbackTrendingNow: TrendingItem[] = familiarWorks.map((work, index) => ({
-  title: work.title,
-  category: work.format === "Playscript" ? "Classic Playscript" : "Classic Story",
-  format: work.format,
-  reads: `By ${work.author}`,
-  imageSrc: getGeneratedCover(work.format, index),
-  href: buildOpenLibrarySearchHref(work.searchTitle ?? work.title, work.author),
-  source: "StoryForge",
-}));
-
-const editorsPick = editorsPickWorks.slice(0, 6).map((work, index) => ({
-  title: work.title,
-  category: `${work.format} · ${work.author}`,
-  blurb: work.editorBlurb,
-  imageSrc: getGeneratedCover(work.format, index + 1),
-}));
-
 const LandingPage = () => {
-  const [trendingItems, setTrendingItems] = useState<TrendingItem[]>(fallbackTrendingNow);
-  const [trendingState, setTrendingState] = useState<"loading" | "live" | "fallback">("loading");
+  const [trendingItems, setTrendingItems] = useState<TrendingItem[]>([]);
+  const [trendingState, setTrendingState] = useState<"loading" | "live" | "cache" | "fallback">(
+    "loading"
+  );
   const [trendingUpdatedAt, setTrendingUpdatedAt] = useState<string | null>(null);
-  const [liveCoversByTitle, setLiveCoversByTitle] = useState<Record<string, string>>({});
+  const [recommendedTopics, setRecommendedTopics] = useState<TopicRecommendation[]>([]);
+  const [topicsState, setTopicsState] = useState<"loading" | "live" | "cache" | "fallback">(
+    "loading"
+  );
+  const [topicsUpdatedAt, setTopicsUpdatedAt] = useState<string | null>(null);
   const readerShelfItems = trendingItems.slice(0, 4);
   const trendingNowItems = trendingItems.slice(0, 8);
+  const editorsPick = useMemo(
+    () =>
+      recommendedTopics.slice(0, 6).map((topic, index) => ({
+        title: topic.title,
+        category: `${topic.format} · ${topic.source ?? "Live Source"}`,
+        blurb: topic.description,
+        imageSrc: topic.imageSrc || getGeneratedCover(topic.format, index + 1),
+      })),
+    [recommendedTopics]
+  );
 
-  const getCoverSrc = (title: string, fallbackSrc: string) =>
-    liveCoversByTitle[title] ?? fallbackSrc;
+  const getCoverSrc = (_title: string, fallbackSrc: string) =>
+    fallbackSrc || onlineImageFallback;
 
   useEffect(() => {
     let cancelled = false;
 
-    const fetchCuratedCovers = async () => {
-      const results = await Promise.allSettled(
-        coverLookupTargets.map(async (item) => {
-          const coverSrc = await fetchOpenLibraryCover(item.searchTitle, item.author);
-          return { title: item.title, coverSrc };
-        })
-      );
-
+    const loadTrending = async () => {
+      const result = await getTrendingRecommendations({ limit: 8 });
       if (cancelled) return;
 
-      const nextCovers: Record<string, string> = {};
-      for (const result of results) {
-        if (result.status !== "fulfilled") continue;
-        if (!result.value.coverSrc) continue;
-        nextCovers[result.value.title] = result.value.coverSrc;
+      if (result.items.length > 0) {
+        setTrendingItems(
+          result.items.map((item, index) => ({
+            ...item,
+            imageSrc: item.imageSrc || getGeneratedCover(item.format, index),
+          }))
+        );
+        setTrendingState(result.source === "live" ? "live" : "cache");
+        setTrendingUpdatedAt(result.updatedAt);
+        return;
       }
 
-      if (Object.keys(nextCovers).length > 0) {
-        setLiveCoversByTitle(nextCovers);
-      }
+      setTrendingItems([]);
+      setTrendingState("fallback");
+      setTrendingUpdatedAt(null);
     };
 
-    void fetchCuratedCovers();
+    void loadTrending();
     return () => {
       cancelled = true;
     };
@@ -385,79 +155,33 @@ const LandingPage = () => {
   useEffect(() => {
     let cancelled = false;
 
-    const fetchLiveTrending = async () => {
-      try {
-        const sources: Array<{ url: string; format: CoverFormat }> = [
-          { url: "https://www.reddit.com/r/WritingPrompts/top.json?t=day&limit=8", format: "Story" },
-          { url: "https://www.reddit.com/r/shortstories/top.json?t=day&limit=8", format: "Story" },
-          { url: "https://www.reddit.com/r/Screenwriting/top.json?t=day&limit=8", format: "Playscript" },
-        ];
+    const loadTopics = async () => {
+      const result = await getTopicsForYouRecommendations({
+        userId: "guest",
+        genres: [],
+        recentTitles: [],
+        limit: 6,
+      });
+      if (cancelled) return;
 
-        const responses = await Promise.allSettled(
-          sources.map(async (source) => {
-            const response = await fetch(source.url);
-            if (!response.ok) return [];
-            const payload = (await response.json()) as {
-              data?: { children?: Array<{ data?: Record<string, unknown> }> };
-            };
-            const children = payload.data?.children ?? [];
-            return children.map((entry) => ({ source, post: entry.data ?? {} }));
-          })
+      if (result.items.length > 0) {
+        setRecommendedTopics(
+          result.items.map((item, index) => ({
+            ...item,
+            imageSrc: item.imageSrc || getGeneratedCover(item.format, index),
+          }))
         );
-
-        const collected = responses.flatMap((result) =>
-          result.status === "fulfilled" ? result.value : []
-        );
-
-        const liveItems: TrendingItem[] = collected
-          .map(({ source, post }, index) => {
-            const title = typeof post.title === "string" ? post.title : "";
-            const subreddit = typeof post.subreddit === "string" ? post.subreddit : "writing";
-            const permalink = typeof post.permalink === "string" ? post.permalink : "";
-            const ups = typeof post.ups === "number" ? post.ups : 0;
-            const thumbnail =
-              typeof post.thumbnail === "string" && /^https?:\/\//.test(post.thumbnail)
-                ? post.thumbnail
-                : getGeneratedCover(source.format, index);
-            const isPinned = Boolean(post.stickied);
-            const isRemoved = title.toLowerCase().includes("[removed]");
-
-            if (!title || !permalink || isPinned || isRemoved) return null;
-
-            return {
-              title,
-              category: `r/${subreddit}`,
-              format: source.format,
-              reads: `${ups.toLocaleString()} upvotes`,
-              imageSrc: thumbnail,
-              href: `https://www.reddit.com${permalink}`,
-              score: ups,
-              source: "Reddit",
-            } satisfies TrendingItem;
-          })
-          .filter((item): item is TrendingItem => item !== null)
-          .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-          .slice(0, 8);
-
-        if (cancelled) return;
-
-        if (liveItems.length > 0) {
-          setTrendingItems(liveItems);
-          setTrendingState("live");
-          setTrendingUpdatedAt(new Date().toISOString());
-          return;
-        }
-
-        setTrendingItems(fallbackTrendingNow);
-        setTrendingState("fallback");
-      } catch {
-        if (cancelled) return;
-        setTrendingItems(fallbackTrendingNow);
-        setTrendingState("fallback");
+        setTopicsState(result.source === "live" ? "live" : "cache");
+        setTopicsUpdatedAt(result.updatedAt);
+        return;
       }
+
+      setRecommendedTopics([]);
+      setTopicsState("fallback");
+      setTopicsUpdatedAt(null);
     };
 
-    void fetchLiveTrending();
+    void loadTopics();
     return () => {
       cancelled = true;
     };
@@ -514,7 +238,7 @@ const LandingPage = () => {
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button size="lg" className="text-base px-8 py-6" asChild>
-                <Link to="/dashboard">Start Writing Free</Link>
+                <Link to="/signup">Start Writing Free</Link>
               </Button>
               <Button size="lg" variant="outline" className="text-base px-8 py-6" asChild>
                 <a href="#discover">Explore Trending</a>
@@ -545,36 +269,44 @@ const LandingPage = () => {
               <span className="text-xs text-muted-foreground font-body">
                 {trendingState === "live"
                   ? "Updated Live"
+                  : trendingState === "cache"
+                    ? "Cached Snapshot"
                   : trendingState === "loading"
                     ? "Syncing..."
-                    : "Curated Picks"}
+                    : "Feed Unavailable"}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {readerShelfItems.map((story) => (
-                <article
-                  key={`${story.title}-shelf`}
-                  className="rounded-xl overflow-hidden border border-border bg-background shadow-sm"
-                >
-                  <div className="relative aspect-[3/4] overflow-hidden">
-                    <img
-                      src={getCoverSrc(story.title, story.imageSrc)}
-                      alt={story.title}
-                      loading="lazy"
-                      className="w-full h-full object-cover"
-                      onError={(event) => {
-                        event.currentTarget.onerror = null;
-                        event.currentTarget.src = onlineImageFallback;
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                    <div className="absolute left-3 right-3 bottom-3">
-                      <p className="font-body text-[10px] uppercase tracking-wide text-white/90 mb-1">{story.format}</p>
-                      <h3 className="font-display text-sm font-semibold text-white leading-tight line-clamp-2">{story.title}</h3>
+              {readerShelfItems.length === 0 ? (
+                <p className="col-span-2 rounded-lg border border-border bg-background p-4 text-sm text-muted-foreground">
+                  Live recommendations are syncing. Check back in a moment.
+                </p>
+              ) : (
+                readerShelfItems.map((story) => (
+                  <article
+                    key={`${story.title}-shelf`}
+                    className="rounded-xl overflow-hidden border border-border bg-background shadow-sm"
+                  >
+                    <div className="relative aspect-[3/4] overflow-hidden">
+                      <img
+                        src={getCoverSrc(story.title, story.imageSrc)}
+                        alt={story.title}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = onlineImageFallback;
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                      <div className="absolute left-3 right-3 bottom-3">
+                        <p className="font-body text-[10px] uppercase tracking-wide text-white/90 mb-1">{story.format}</p>
+                        <h3 className="font-display text-sm font-semibold text-white leading-tight line-clamp-2">{story.title}</h3>
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                ))
+              )}
             </div>
           </motion.div>
         </div>
@@ -596,52 +328,60 @@ const LandingPage = () => {
             </h2>
             <p className="font-body text-sm text-muted-foreground mt-2">
               {trendingState === "live" && trendingUpdatedAt
-                ? `Live from Reddit · Updated ${new Date(trendingUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                ? `Live from external sources · Updated ${new Date(trendingUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                : trendingState === "cache" && trendingUpdatedAt
+                  ? `Showing cached live results · Last updated ${new Date(trendingUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                 : trendingState === "loading"
                   ? "Loading live trends..."
-                  : ""}
+                  : "Live feeds are temporarily unavailable."}
             </p>
           </motion.div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-14">
-            {trendingNowItems.map((story, i) => (
-              <motion.a
-                key={story.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.08 }}
-                className="rounded-xl overflow-hidden border border-border bg-background group hover:border-primary/30 transition-colors"
-                href={story.href}
-                target={story.href ? "_blank" : undefined}
-                rel={story.href ? "noreferrer" : undefined}
-              >
-                <div className="relative aspect-[3/4] overflow-hidden">
-                  <img
-                    src={getCoverSrc(story.title, story.imageSrc)}
-                    alt={story.title}
-                    loading="lazy"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    onError={(event) => {
-                      event.currentTarget.onerror = null;
-                      event.currentTarget.src = onlineImageFallback;
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
-                  <div className="absolute left-4 right-4 bottom-4">
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-black/60 text-white/90 px-2.5 py-1 text-[11px] font-body mb-2">
-                      {story.format === "Playscript" ? <Theater className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
-                      {story.format}
+            {trendingNowItems.length === 0 ? (
+              <div className="col-span-full rounded-xl border border-border bg-background p-6 text-sm text-muted-foreground">
+                No live trending stories are available right now.
+              </div>
+            ) : (
+              trendingNowItems.map((story, i) => (
+                <motion.a
+                  key={story.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: i * 0.08 }}
+                  className="rounded-xl overflow-hidden border border-border bg-background group hover:border-primary/30 transition-colors"
+                  href={story.href}
+                  target={story.href ? "_blank" : undefined}
+                  rel={story.href ? "noreferrer" : undefined}
+                >
+                  <div className="relative aspect-[3/4] overflow-hidden">
+                    <img
+                      src={getCoverSrc(story.title, story.imageSrc)}
+                      alt={story.title}
+                      loading="lazy"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(event) => {
+                        event.currentTarget.onerror = null;
+                        event.currentTarget.src = onlineImageFallback;
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
+                    <div className="absolute left-4 right-4 bottom-4">
+                      <div className="inline-flex items-center gap-1.5 rounded-full bg-black/60 text-white/90 px-2.5 py-1 text-[11px] font-body mb-2">
+                        {story.format === "Playscript" ? <Theater className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
+                        {story.format}
+                      </div>
+                      <h3 className="font-display text-xl font-semibold text-white mb-1 leading-tight">{story.title}</h3>
+                      <p className="font-body text-xs text-white/80">
+                        {story.category} · {story.reads}
+                        {story.source ? ` · ${story.source}` : ""}
+                      </p>
                     </div>
-                    <h3 className="font-display text-xl font-semibold text-white mb-1 leading-tight">{story.title}</h3>
-                    <p className="font-body text-xs text-white/80">
-                      {story.category} · {story.reads}
-                      {story.source ? ` · ${story.source}` : ""}
-                    </p>
                   </div>
-                </div>
-              </motion.a>
-            ))}
+                </motion.a>
+              ))
+            )}
           </div>
 
           <motion.div
@@ -658,34 +398,40 @@ const LandingPage = () => {
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {editorsPick.map((story, i) => (
-              <motion.article
-                key={story.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="bg-background rounded-xl border border-border overflow-hidden group hover:border-primary/30 transition-colors"
-              >
-                <div className="aspect-[16/10] overflow-hidden">
-                  <img
-                    src={getCoverSrc(story.title, story.imageSrc)}
-                    alt={story.title}
-                    loading="lazy"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    onError={(event) => {
-                      event.currentTarget.onerror = null;
-                      event.currentTarget.src = onlineImageFallback;
-                    }}
-                  />
-                </div>
-                <div className="p-5">
-                  <p className="font-body text-xs uppercase tracking-wide text-primary mb-2">{story.category}</p>
-                  <h4 className="font-display text-xl font-semibold text-foreground mb-2">{story.title}</h4>
-                  <p className="font-body text-sm text-muted-foreground leading-relaxed">{story.blurb}</p>
-                </div>
-              </motion.article>
-            ))}
+            {editorsPick.length === 0 ? (
+              <div className="col-span-full rounded-xl border border-border bg-background p-6 text-sm text-muted-foreground">
+                Editor picks are unavailable until live topic data is loaded.
+              </div>
+            ) : (
+              editorsPick.map((story, i) => (
+                <motion.article
+                  key={story.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: i * 0.1 }}
+                  className="bg-background rounded-xl border border-border overflow-hidden group hover:border-primary/30 transition-colors"
+                >
+                  <div className="aspect-[16/10] overflow-hidden">
+                    <img
+                      src={getCoverSrc(story.title, story.imageSrc)}
+                      alt={story.title}
+                      loading="lazy"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(event) => {
+                        event.currentTarget.onerror = null;
+                        event.currentTarget.src = onlineImageFallback;
+                      }}
+                    />
+                  </div>
+                  <div className="p-5">
+                    <p className="font-body text-xs uppercase tracking-wide text-primary mb-2">{story.category}</p>
+                    <h4 className="font-display text-xl font-semibold text-foreground mb-2">{story.title}</h4>
+                    <p className="font-body text-sm text-muted-foreground leading-relaxed">{story.blurb}</p>
+                  </div>
+                </motion.article>
+              ))
+            )}
           </div>
         </div>
       </section>
@@ -740,40 +486,55 @@ const LandingPage = () => {
             <h2 className="font-display text-3xl md:text-5xl font-bold text-foreground">
               Topics for You
             </h2>
+            <p className="font-body text-sm text-muted-foreground mt-2">
+              {topicsState === "live" && topicsUpdatedAt
+                ? `Live topics from external APIs · Updated ${new Date(topicsUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                : topicsState === "cache" && topicsUpdatedAt
+                  ? `Showing cached topic results · Last updated ${new Date(topicsUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                  : topicsState === "loading"
+                    ? "Loading live topic recommendations..."
+                    : "Live topic feeds are temporarily unavailable."}
+            </p>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {recommendedTopics.map((topic, i) => (
-              <motion.article
-                key={topic.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="bg-card rounded-xl border border-border overflow-hidden group hover:border-primary/30 transition-colors"
-              >
-                <div className="aspect-[16/10] overflow-hidden">
-                  <img
-                    src={getCoverSrc(topic.title, topic.imageSrc)}
-                    alt={topic.title}
-                    loading="lazy"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    onError={(event) => {
-                      event.currentTarget.onerror = null;
-                      event.currentTarget.src = onlineImageFallback;
-                    }}
-                  />
-                </div>
-                <div className="p-6">
-                  <div className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 mb-3">
-                    {topic.format === "Playscript" ? <Theater className="h-3 w-3 text-primary" /> : <FileText className="h-3 w-3 text-primary" />}
-                    <span className="font-body text-[11px] uppercase tracking-wide text-primary">{topic.format}</span>
+            {recommendedTopics.length === 0 ? (
+              <div className="col-span-full rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
+                No live topic recommendations are available right now.
+              </div>
+            ) : (
+              recommendedTopics.map((topic, i) => (
+                <motion.article
+                  key={topic.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: i * 0.1 }}
+                  className="bg-card rounded-xl border border-border overflow-hidden group hover:border-primary/30 transition-colors"
+                >
+                  <div className="aspect-[16/10] overflow-hidden">
+                    <img
+                      src={getCoverSrc(topic.title, topic.imageSrc)}
+                      alt={topic.title}
+                      loading="lazy"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(event) => {
+                        event.currentTarget.onerror = null;
+                        event.currentTarget.src = onlineImageFallback;
+                      }}
+                    />
                   </div>
-                  <h3 className="font-display text-xl font-semibold text-foreground mb-2">{topic.title}</h3>
-                  <p className="font-body text-muted-foreground leading-relaxed">{topic.description}</p>
-                </div>
-              </motion.article>
-            ))}
+                  <div className="p-6">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 mb-3">
+                      {topic.format === "Playscript" ? <Theater className="h-3 w-3 text-primary" /> : <FileText className="h-3 w-3 text-primary" />}
+                      <span className="font-body text-[11px] uppercase tracking-wide text-primary">{topic.format}</span>
+                    </div>
+                    <h3 className="font-display text-xl font-semibold text-foreground mb-2">{topic.title}</h3>
+                    <p className="font-body text-muted-foreground leading-relaxed">{topic.description}</p>
+                  </div>
+                </motion.article>
+              ))
+            )}
           </div>
         </div>
       </section>

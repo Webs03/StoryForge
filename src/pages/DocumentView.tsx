@@ -40,11 +40,14 @@ const formatRelativeTime = (value: Date) => {
 
 const DocumentView = () => {
   const { id } = useParams();
-  const { documents, loading, error, updateDocument } = useDocuments();
+  const { documents, loading, error, getDocumentById, updateDocument } = useDocuments();
   const [titleDraft, setTitleDraft] = useState("");
   const [contentDraft, setContentDraft] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isResolvingDocument, setIsResolvingDocument] = useState(false);
+  const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
+  const [resolveAttemptedForId, setResolveAttemptedForId] = useState<string | null>(null);
 
   const document = useMemo(
     () => documents.find((item) => item.id === id) ?? null,
@@ -56,6 +59,39 @@ const DocumentView = () => {
     setTitleDraft(document.title);
     setContentDraft(document.content);
   }, [document]);
+
+  useEffect(() => {
+    if (!id || loading || error || document || resolveAttemptedForId === id) return;
+
+    let cancelled = false;
+
+    const resolveDocument = async () => {
+      try {
+        setDocumentLoadError(null);
+        setResolveAttemptedForId(id);
+        setIsResolvingDocument(true);
+        await getDocumentById(id);
+      } catch (err) {
+        if (cancelled) return;
+        setDocumentLoadError(err instanceof Error ? err.message : "Failed to load document");
+      } finally {
+        if (!cancelled) {
+          setIsResolvingDocument(false);
+        }
+      }
+    };
+
+    void resolveDocument();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, loading, error, document, getDocumentById, resolveAttemptedForId]);
+
+  useEffect(() => {
+    setResolveAttemptedForId(null);
+    setDocumentLoadError(null);
+  }, [id]);
 
   const hasUnsavedChanges =
     !!document &&
@@ -81,23 +117,23 @@ const DocumentView = () => {
     }
   };
 
-  if (loading) {
+  if (loading || isResolvingDocument) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground font-body">
           <Spinner />
-          <span>Loading document...</span>
+          <span>{isResolvingDocument ? "Opening document..." : "Loading document..."}</span>
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error || documentLoadError) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-6">
         <div className="text-center">
           <p className="font-display text-2xl text-foreground mb-2">Could not load document</p>
-          <p className="font-body text-sm text-muted-foreground mb-6">{error}</p>
+          <p className="font-body text-sm text-muted-foreground mb-6">{error || documentLoadError}</p>
           <Button asChild>
             <Link to="/dashboard">Back to Dashboard</Link>
           </Button>

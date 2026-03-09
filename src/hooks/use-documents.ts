@@ -6,6 +6,7 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   getDocsFromCache,
   type QuerySnapshot,
@@ -76,24 +77,29 @@ const normalizeErrorMessage = (err: unknown, fallback: string) => {
   return err instanceof Error ? err.message : fallback;
 };
 
+const mapDocumentData = (
+  documentId: string,
+  data: Record<string, unknown>,
+  fallbackOwner: string
+): Document => ({
+  id: documentId,
+  title: typeof data.title === "string" ? data.title : "Untitled",
+  content: typeof data.content === "string" ? data.content : "",
+  owner: typeof data.owner === "string" ? data.owner : fallbackOwner,
+  type: parseType(data.type),
+  status: parseStatus(data.status),
+  genre: typeof data.genre === "string" ? data.genre : "Uncategorized",
+  createdAt: parseDate(data.createdAt),
+  updatedAt: parseDate(data.updatedAt),
+});
+
 const mapSnapshotToDocuments = (
   snapshot: QuerySnapshot<DocumentData>,
   fallbackOwner: string
 ) => {
   const docs: Document[] = [];
   snapshot.forEach((item) => {
-    const data = item.data();
-    docs.push({
-      id: item.id,
-      title: typeof data.title === "string" ? data.title : "Untitled",
-      content: typeof data.content === "string" ? data.content : "",
-      owner: typeof data.owner === "string" ? data.owner : fallbackOwner,
-      type: parseType(data.type),
-      status: parseStatus(data.status),
-      genre: typeof data.genre === "string" ? data.genre : "Uncategorized",
-      createdAt: parseDate(data.createdAt),
-      updatedAt: parseDate(data.updatedAt),
-    });
+    docs.push(mapDocumentData(item.id, item.data(), fallbackOwner));
   });
   docs.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
   return docs;
@@ -248,11 +254,38 @@ export const useDocuments = () => {
     }
   };
 
+  const getDocumentById = async (docId: string) => {
+    if (!user) throw new Error("User not authenticated");
+    const existing = documents.find((item) => item.id === docId);
+    if (existing) return existing;
+
+    const firestore = getDbInstance();
+
+    try {
+      const snapshot = await getDoc(doc(firestore, "documents", docId));
+      if (!snapshot.exists()) return null;
+
+      const mapped = mapDocumentData(snapshot.id, snapshot.data(), user.uid);
+      if (mapped.owner !== user.uid) return null;
+
+      setDocuments((previous) => {
+        const next = [mapped, ...previous.filter((item) => item.id !== mapped.id)];
+        next.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        return next;
+      });
+
+      return mapped;
+    } catch (err) {
+      throw new Error(normalizeErrorMessage(err, "Failed to load document"));
+    }
+  };
+
   return {
     documents,
     loading,
     error,
     createDocument,
+    getDocumentById,
     updateDocument,
     deleteDocument,
   };
