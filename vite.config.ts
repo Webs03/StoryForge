@@ -29,6 +29,11 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/gutendex/, ""),
       },
+      "/api/gutenberg": {
+        target: "https://www.gutenberg.org",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/gutenberg/, ""),
+      },
     }
   },
   plugins: [react()].filter(Boolean),

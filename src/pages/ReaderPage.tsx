@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
+  ArrowRight,
   BookOpen,
   ExternalLink,
   FileText,
@@ -47,10 +48,13 @@ type GutendexResponse = {
     authors?: Array<{ name?: string }>;
     subjects?: string[];
     summaries?: string[];
+    formats?: Record<string, string>;
   }>;
 };
 
 const FALLBACK_IMAGE = "/covers/fallback-cover.svg";
+const MAX_FULLTEXT_CHARS = 1_200_000;
+const PARAGRAPHS_PER_PAGE = 40;
 
 const decodeHtmlEntities = (value: string) =>
   value
@@ -60,17 +64,37 @@ const decodeHtmlEntities = (value: string) =>
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">");
 
-const stripHtml = (value: string) =>
-  decodeHtmlEntities(value).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+const sanitizeText = (value: string) =>
+  decodeHtmlEntities(value)
+    .replace(/\r\n/g, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
 const toParagraphs = (text: string) => {
-  const clean = stripHtml(text);
+  const clean = sanitizeText(text);
   if (!clean) return [];
+
+  const paragraphSplit = clean
+    .split(/\n{2,}/)
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length > 0);
+
+  const normalized = paragraphSplit.map((chunk) =>
+    chunk.replace(/[ \t]*\n[ \t]*/g, " ").replace(/\s+/g, " ").trim()
+  );
+
+  if (normalized.length >= 3) return normalized.slice(0, 3000);
+
   return clean
-    .split(/\n{2,}|(?<=[.?!])\s{2,}/)
+    .replace(/[ \t]*\n[ \t]*/g, " ")
+    .split(/(?<=[.?!])\s+/)
     .map((chunk) => chunk.trim())
     .filter((chunk) => chunk.length > 0)
-    .slice(0, 12);
+    .slice(0, 3000);
 };
 
 const buildExternalApiUrl = (
@@ -101,6 +125,25 @@ const fetchJsonWithTimeout = async <T,>(url: string, timeoutMs = 7000): Promise<
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) return null;
     return (await response.json()) as T;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const fetchTextWithTimeout = async (url: string, timeoutMs = 12000): Promise<string | null> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: "text/plain,text/html;q=0.9,*/*;q=0.1" },
+    });
+    if (!response.ok) return null;
+    const text = await response.text();
+    if (!text) return null;
+    return text.slice(0, MAX_FULLTEXT_CHARS);
   } catch {
     return null;
   } finally {
@@ -168,6 +211,82 @@ const extractGutendexId = (href?: string) => {
   return match[1];
 };
 
+const normalizeExternalTextUrl = (rawUrl: string) => {
+  if (!import.meta.env.DEV) return rawUrl;
+  try {
+    const url = new URL(rawUrl);
+    if (url.hostname.endsWith("gutenberg.org")) {
+      return `/api/gutenberg${url.pathname}${url.search}`;
+    }
+  } catch {
+    return rawUrl;
+  }
+  return rawUrl;
+};
+
+const pickGutendexTextUrl = (formats?: Record<string, string>) => {
+  if (!formats) return null;
+  const candidates = Object.entries(formats)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+    .map(([mime, url]) => ({ mime: mime.toLowerCase(), url }))
+    .filter(
+      ({ mime, url }) =>
+        /^https?:\/\//.test(url) &&
+        (mime.startsWith("text/plain") || mime.startsWith("text/html")) &&
+        !mime.includes("zip")
+    );
+
+  if (candidates.length === 0) return null;
+
+  const score = (mime: string) => {
+    if (mime.startsWith("text/plain; charset=utf-8")) return 5;
+    if (mime.startsWith("text/plain")) return 4;
+    if (mime.startsWith("text/html; charset=utf-8")) return 3;
+    if (mime.startsWith("text/html")) return 2;
+    return 1;
+  };
+
+  candidates.sort((a, b) => score(b.mime) - score(a.mime));
+  return candidates[0]?.url ?? null;
+};
+
+const trimGutenbergBoilerplate = (raw: string) => {
+  const text = raw.replace(/\r\n/g, "\n");
+  const lower = text.toLowerCase();
+  const startMarkers = [
+    "*** start of the project gutenberg ebook",
+    "***start of the project gutenberg ebook",
+    "start of the project gutenberg ebook",
+    "*** start of this project gutenberg ebook",
+  ];
+  const endMarkers = [
+    "*** end of the project gutenberg ebook",
+    "***end of the project gutenberg ebook",
+    "end of the project gutenberg ebook",
+    "end of project gutenberg",
+  ];
+
+  let startIndex = 0;
+  for (const marker of startMarkers) {
+    const markerIndex = lower.indexOf(marker);
+    if (markerIndex === -1) continue;
+    const firstNewline = text.indexOf("\n", markerIndex);
+    startIndex = firstNewline === -1 ? markerIndex + marker.length : firstNewline + 1;
+    break;
+  }
+
+  let endIndex = text.length;
+  for (const marker of endMarkers) {
+    const markerIndex = lower.indexOf(marker, startIndex);
+    if (markerIndex === -1) continue;
+    endIndex = markerIndex;
+    break;
+  }
+
+  const trimmed = text.slice(startIndex, endIndex).trim();
+  return trimmed || text.trim();
+};
+
 const buildFallbackBody = (payload: ReaderLinkPayload) => {
   const parts = [
     payload.description,
@@ -189,7 +308,7 @@ const fetchInAppContent = async (payload: ReaderLinkPayload): Promise<string | n
       7000
     );
     const raw = payloadData?.[0]?.data?.children?.[0]?.data?.selftext ?? "";
-    return stripHtml(raw);
+    return sanitizeText(raw);
   }
 
   if (provider === "openlibrary") {
@@ -207,7 +326,7 @@ const fetchInAppContent = async (payload: ReaderLinkPayload): Promise<string | n
       typeof payloadData?.first_sentence === "string"
         ? payloadData.first_sentence
         : payloadData?.first_sentence?.value ?? "";
-    return stripHtml(`${description}\n\n${firstSentence}`.trim());
+    return sanitizeText(`${description}\n\n${firstSentence}`.trim());
   }
 
   if (provider === "googlebooks") {
@@ -218,7 +337,7 @@ const fetchInAppContent = async (payload: ReaderLinkPayload): Promise<string | n
         7000
       );
       if (payloadData?.volumeInfo?.description) {
-        return stripHtml(payloadData.volumeInfo.description);
+        return sanitizeText(payloadData.volumeInfo.description);
       }
     }
 
@@ -231,7 +350,7 @@ const fetchInAppContent = async (payload: ReaderLinkPayload): Promise<string | n
         7000
       );
       const description = payloadData?.items?.[0]?.volumeInfo?.description ?? "";
-      return stripHtml(description);
+      return sanitizeText(description);
     }
   }
 
@@ -244,10 +363,19 @@ const fetchInAppContent = async (payload: ReaderLinkPayload): Promise<string | n
     );
     const entry = payloadData?.results?.[0];
     if (!entry) return null;
+
+    const fullTextUrl = pickGutendexTextUrl(entry.formats);
+    if (fullTextUrl) {
+      const textResponse = await fetchTextWithTimeout(normalizeExternalTextUrl(fullTextUrl), 15000);
+      if (textResponse && textResponse.trim().length > 1500) {
+        return trimGutenbergBoilerplate(textResponse);
+      }
+    }
+
     const summary = entry.summaries?.[0] ?? "";
     const author = entry.authors?.[0]?.name ?? "Unknown Author";
     const subjects = (entry.subjects ?? []).slice(0, 5).join(", ");
-    return stripHtml(
+    return sanitizeText(
       [summary, `Author: ${author}.`, subjects ? `Subjects: ${subjects}.` : ""]
         .filter(Boolean)
         .join("\n\n")
@@ -264,6 +392,7 @@ const ReaderPage = () => {
   const [status, setStatus] = useState<ReaderStatus>("idle");
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -299,7 +428,16 @@ const ReaderPage = () => {
   }, [payload]);
 
   const paragraphs = useMemo(() => toParagraphs(content), [content]);
+  const totalPages = Math.max(1, Math.ceil(paragraphs.length / PARAGRAPHS_PER_PAGE));
+  const visibleParagraphs = useMemo(() => {
+    const start = (currentPage - 1) * PARAGRAPHS_PER_PAGE;
+    return paragraphs.slice(start, start + PARAGRAPHS_PER_PAGE);
+  }, [paragraphs, currentPage]);
   const isPlayscript = payload.format === "Playscript";
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [payload.title, content]);
 
   const handleBack = () => {
     if (window.history.length > 1) {
@@ -396,10 +534,42 @@ const ReaderPage = () => {
               )}
 
               <article className="prose prose-stone max-w-none">
+                {paragraphs.length > PARAGRAPHS_PER_PAGE && (
+                  <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
+                    <p className="font-body text-sm text-muted-foreground">
+                      Page {currentPage} of {totalPages}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCurrentPage((previous) => Math.max(1, previous - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ArrowLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setCurrentPage((previous) => Math.min(totalPages, previous + 1))
+                        }
+                        disabled={currentPage >= totalPages}
+                      >
+                        Next
+                        <ArrowRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {paragraphs.length > 0 ? (
-                  paragraphs.map((paragraph, index) => (
+                  visibleParagraphs.map((paragraph, index) => (
                     <p
-                      key={`${payload.title}-paragraph-${index}`}
+                      key={`${payload.title}-paragraph-${currentPage}-${index}`}
                       className="font-body text-foreground/90 leading-8 text-base md:text-lg mb-6"
                     >
                       {paragraph}
@@ -411,6 +581,23 @@ const ReaderPage = () => {
                   </p>
                 )}
               </article>
+
+              {paragraphs.length > PARAGRAPHS_PER_PAGE && (
+                <div className="mt-6 flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setCurrentPage((previous) => Math.min(totalPages, previous + 1))
+                    }
+                    disabled={currentPage >= totalPages}
+                  >
+                    Continue Reading
+                    <ArrowRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              )}
             </main>
           </motion.div>
         )}
