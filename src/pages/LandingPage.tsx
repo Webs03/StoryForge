@@ -833,7 +833,7 @@ const LandingPage = () => {
               Join writers who trust StoryForge to keep their words safe, organized, and beautifully formatted.
             </p>
             <Button size="lg" className="text-base px-10 py-6" asChild>
-              <Link to="/dashboard">Get Started — It's Free</Link>
+              <Link to="/signup">Get Started — It's Free</Link>
             </Button>
           </motion.div>
         </div>
